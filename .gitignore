@@ -1,0 +1,17 @@
+.cache/
+.codex
+.gradle-home/
+.idea/
+
+build/
+build-nocache/
+cmake-build-*/
+compile_commands.json
+
+client/android-app/.gradle/
+client/android-app/.idea/
+client/android-app/app/.cxx/
+client/android-app/app/build/
+client/android-app/local.properties
+
+*.apk
