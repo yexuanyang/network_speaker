@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -37,7 +38,7 @@ private:
     void Close() noexcept;
     [[nodiscard]] bool EnsureOpen();
 
-    int fd_ = -1;
+    std::intptr_t fd_ = -1;
     std::uint16_t bound_port_ = 0;
 };
 

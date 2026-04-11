@@ -16,7 +16,7 @@
   - 发送端 CLI
   - 正弦波采集源
   - Linux `PulseAudio` 采集和默认 monitor source 自动发现
-  - Windows `WASAPI` 接口占位
+  - Windows `WASAPI loopback` 默认渲染设备采集
 - `client/core`
   - 接收端核心流水线
   - 解码、抖动缓冲、统计
@@ -75,6 +75,19 @@ export GRADLE_USER_HOME=/home/yyx/workspaces/network_speaker/.gradle-home
 client/android-app/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+Windows 推荐在 Visual Studio Developer PowerShell 或执行过 `vcvarsall.bat` 的终端中构建：
+
+```powershell
+cmake -S . -B build-windows -G "NMake Makefiles" -DBUILD_TESTING=OFF
+cmake --build build-windows
+```
+
+说明：
+
+- Windows 下默认使用仓库内的 `third_party/opus`，不依赖 MSYS2 `pkg-config` 或 MinGW 预编译库
+- 若本机已安装兼容当前工具链的 GoogleTest，可启用 `-DBUILD_TESTING=ON`
+- 若未安装 GoogleTest，配置阶段会给出警告并跳过 `network_speaker_tests` 目标，不影响 `hostd` / `clientd` 构建
+
 ## 运行
 
 发送端：
@@ -91,6 +104,28 @@ client/android-app/app/build/outputs/apk/debug/app-debug.apk
 
 当前沙箱限制本地 UDP 绑定，因此仓库内的自动化端到端测试使用“协议级内存回环”，而不直接依赖真实 socket。实际机器上运行 `hostd`/`clientd` 时可以验证真实网络链路。
 
+Windows 到 Android 模拟器的联调，当前建议优先使用短时 PowerShell 命令分步验证，而不是长时间脚本：
+
+```powershell
+$adb = 'C:\Users\11822\AppData\Local\Android\Sdk\platform-tools\adb.exe'
+$hostd = '.\build-windows-verify\hostd.exe'
+
+& $adb emu redir add udp:50000:50000
+& $adb shell am start -n com.example.networkspeaker/.MainActivity
+& $adb shell input tap 540 1228
+
+# 另开一个短命令窗口播放测试音后执行
+& $hostd --host 127.0.0.1 --port 50000 --source wasapi --seconds 3
+```
+
+说明：
+
+- 短时验证时，建议把 `hostd --seconds` 控制在 `3` 到 `4` 秒
+- 通过 `adb logcat -d -s NetworkSpeaker NetworkSpeakerNative AndroidRuntime` 可以确认 `ClientSession` 和 `PCM write` 日志
+- `tools/windows_android_emulator_e2e.ps1` 仍保留为实验脚本，但当前环境下存在 PowerShell 子进程收尾阻塞风险，不建议作为默认入口
+- 运行前需要 Android 模拟器已启动，且 `com.example.networkspeaker` 已安装到模拟器
+- 若当前模拟器中的 `com.example.networkspeaker` 与本地 APK 签名不一致，`adb install -r` 会失败，需要先卸载旧包再安装当前调试包
+
 ## 当前实现边界
 
 - 已完成：
@@ -99,8 +134,10 @@ client/android-app/app/build/outputs/apk/debug/app-debug.apk
   - Opus 低延迟编码链路
   - 自定义包头与抖动缓冲
   - Linux 默认 monitor source 自动发现
+  - Windows `WASAPI loopback` 本机 `hostd -> clientd` UDP 回环验证
+  - Windows 主机播放音频 -> `hostd --source wasapi` -> Android 模拟器 `AudioTrack` 端到端播放验证
   - Android 壳工程和 `AudioTrack` 播放桥
 - 仍待继续：
-  - Windows `WASAPI loopback` 真实实现
+  - Windows 到 Android 真机的 `hostd --source wasapi` 播放联调记录
   - Android 真机联调和前台通知完善
   - FEC、加密、多声道扩展

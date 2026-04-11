@@ -22,10 +22,12 @@ namespace {
 
 #ifdef _WIN32
 using SocketLength = int;
-constexpr int kInvalidFd = INVALID_SOCKET;
+using SocketHandle = SOCKET;
+constexpr SocketHandle kInvalidFd = INVALID_SOCKET;
 #else
 using SocketLength = socklen_t;
-constexpr int kInvalidFd = -1;
+using SocketHandle = int;
+constexpr SocketHandle kInvalidFd = -1;
 #endif
 
 class SocketRuntime {
@@ -54,7 +56,7 @@ SocketRuntime& Runtime() {
     return runtime;
 }
 
-void CloseFd(int fd) noexcept {
+void CloseFd(SocketHandle fd) noexcept {
 #ifdef _WIN32
     closesocket(fd);
 #else
@@ -105,7 +107,7 @@ UdpSocket::~UdpSocket() {
 }
 
 UdpSocket::UdpSocket(UdpSocket&& other) noexcept : fd_(other.fd_), bound_port_(other.bound_port_) {
-    other.fd_ = kInvalidFd;
+    other.fd_ = static_cast<std::intptr_t>(kInvalidFd);
     other.bound_port_ = 0;
 }
 
@@ -114,7 +116,7 @@ UdpSocket& UdpSocket::operator=(UdpSocket&& other) noexcept {
         Close();
         fd_ = other.fd_;
         bound_port_ = other.bound_port_;
-        other.fd_ = kInvalidFd;
+        other.fd_ = static_cast<std::intptr_t>(kInvalidFd);
         other.bound_port_ = 0;
     }
     return *this;
@@ -135,15 +137,16 @@ bool UdpSocket::Bind(std::uint16_t port) {
     addr.sin_port = htons(port);
 
     const int yes = 1;
-    setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&yes), sizeof(yes));
+    setsockopt(static_cast<SocketHandle>(fd_), SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&yes),
+               sizeof(yes));
 
-    if (bind(fd_, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) != 0) {
+    if (bind(static_cast<SocketHandle>(fd_), reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) != 0) {
         return false;
     }
 
     sockaddr_in bound{};
     SocketLength len = sizeof(bound);
-    if (getsockname(fd_, reinterpret_cast<sockaddr*>(&bound), &len) == 0) {
+    if (getsockname(static_cast<SocketHandle>(fd_), reinterpret_cast<sockaddr*>(&bound), &len) == 0) {
         bound_port_ = ntohs(bound.sin_port);
     }
     return true;
@@ -159,7 +162,7 @@ bool UdpSocket::Connect(const std::string& host, std::uint16_t port) {
         return false;
     }
 
-    return connect(fd_, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) == 0;
+    return connect(static_cast<SocketHandle>(fd_), reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) == 0;
 }
 
 bool UdpSocket::Send(const std::vector<std::uint8_t>& payload) {
@@ -167,7 +170,7 @@ bool UdpSocket::Send(const std::vector<std::uint8_t>& payload) {
         return false;
     }
 
-    return send(fd_, reinterpret_cast<const char*>(payload.data()),
+    return send(static_cast<SocketHandle>(fd_), reinterpret_cast<const char*>(payload.data()),
                 static_cast<int>(payload.size()), 0) == static_cast<int>(payload.size());
 }
 
@@ -182,7 +185,7 @@ bool UdpSocket::SendTo(const std::string& host, std::uint16_t port,
         return false;
     }
 
-    return sendto(fd_, reinterpret_cast<const char*>(payload.data()),
+    return sendto(static_cast<SocketHandle>(fd_), reinterpret_cast<const char*>(payload.data()),
                   static_cast<int>(payload.size()), 0,
                   reinterpret_cast<const sockaddr*>(&addr),
                   sizeof(addr)) == static_cast<int>(payload.size());
@@ -195,13 +198,13 @@ std::optional<Datagram> UdpSocket::Receive(std::chrono::milliseconds timeout) {
 
     fd_set read_set;
     FD_ZERO(&read_set);
-    FD_SET(fd_, &read_set);
+    FD_SET(static_cast<SocketHandle>(fd_), &read_set);
 
     timeval tv{};
     tv.tv_sec = static_cast<long>(timeout.count() / 1000);
     tv.tv_usec = static_cast<long>((timeout.count() % 1000) * 1000);
 
-    const int ready = select(fd_ + 1, &read_set, nullptr, nullptr, &tv);
+    const int ready = select(static_cast<int>(static_cast<SocketHandle>(fd_) + 1), &read_set, nullptr, nullptr, &tv);
     if (ready <= 0) {
         return std::nullopt;
     }
@@ -209,7 +212,7 @@ std::optional<Datagram> UdpSocket::Receive(std::chrono::milliseconds timeout) {
     std::vector<std::uint8_t> buffer(2048);
     sockaddr_in peer{};
     SocketLength peer_len = sizeof(peer);
-    const int received = recvfrom(fd_, reinterpret_cast<char*>(buffer.data()),
+    const int received = recvfrom(static_cast<SocketHandle>(fd_), reinterpret_cast<char*>(buffer.data()),
                                   static_cast<int>(buffer.size()), 0,
                                   reinterpret_cast<sockaddr*>(&peer), &peer_len);
     if (received <= 0) {
@@ -229,20 +232,20 @@ std::uint16_t UdpSocket::bound_port() const noexcept {
 }
 
 void UdpSocket::Close() noexcept {
-    if (fd_ != kInvalidFd) {
-        CloseFd(fd_);
-        fd_ = kInvalidFd;
+    if (static_cast<SocketHandle>(fd_) != kInvalidFd) {
+        CloseFd(static_cast<SocketHandle>(fd_));
+        fd_ = static_cast<std::intptr_t>(kInvalidFd);
     }
     bound_port_ = 0;
 }
 
 bool UdpSocket::EnsureOpen() {
-    if (fd_ != kInvalidFd) {
+    if (static_cast<SocketHandle>(fd_) != kInvalidFd) {
         return true;
     }
 
-    fd_ = socket(AF_INET, SOCK_DGRAM, 0);
-    return fd_ != kInvalidFd;
+    fd_ = static_cast<std::intptr_t>(socket(AF_INET, SOCK_DGRAM, 0));
+    return static_cast<SocketHandle>(fd_) != kInvalidFd;
 }
 
 }  // namespace nspeaker::transport

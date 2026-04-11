@@ -65,6 +65,9 @@
 - Linux 已补充：
   - `PulseAudio` 采集
   - 默认输出设备 monitor source 自动发现
+- Windows 已补充：
+  - `WASAPI loopback` 默认渲染设备采集
+  - 输入混音格式到 `48 kHz / 2 channels / float32 / 10 ms` 的归一化
 
 ### 7. 客户端核心接收链路
 
@@ -409,11 +412,125 @@
   - 从宿主机音频路由与 Android 播放日志看，最终回放目标已切到电脑内置音频输出，
     具备直接通过宿主机内置扬声器听到声音的条件
 
+### 13. Windows `WASAPI loopback` 编译级验证
+
+- 已完成：
+  - `WasapiLoopbackCapture` 的真实实现
+  - 默认渲染设备 `WASAPI loopback` 接入
+  - 常见 `PCM / float` 混音格式到内部固定 PCM 帧格式的转换
+  - 空闲或 silent packet 场景下的 10ms 帧补齐
+- 已执行：
+  - 使用 Windows MSVC 工具链单独编译
+    `server/hostd/src/platform/windows/wasapi_loopback_capture.cpp`
+  - 使用 Windows MSVC 工具链单独编译
+    `server/hostd/src/capture_factory.cpp`
+- 结果：
+  - Windows 采集实现源码已通过编译级验证
+  - `capture_factory` 的 Windows 分支未被新实现破坏
+  - 当前仓库默认 `build/` 目录仍受宿主环境同时存在 `Path` / `PATH` 的
+    MSBuild 环境变量冲突影响，未在该目录内完成整库构建验证
+
+### 14. Windows 全项目构建链路修正
+
+- 已完成：
+  - 顶层 CMake 不再强依赖 `pkg-config`
+  - Windows 默认改为使用仓库内 vendored `third_party/opus`
+  - GoogleTest 改为可选依赖，缺失时跳过 `network_speaker_tests`
+  - 修正 `UdpSocket` 的 Windows socket 句柄类型，兼容 64 位构建
+  - 避免顶层 `BUILD_TESTING=ON` 时误触发第三方 Opus 测试编译
+- 已执行：
+  - 在 Windows MSVC 环境中配置：
+    `cmake -S . -B build-windows -G "NMake Makefiles" -DBUILD_TESTING=OFF`
+  - 在 Windows MSVC 环境中构建：
+    `cmake --build build-windows`
+  - 在 Windows MSVC 环境中配置：
+    `cmake -S . -B build-windows-tests2 -G "NMake Makefiles" -DBUILD_TESTING=ON`
+- 结果：
+  - `build-windows` 已成功产出 `hostd.exe` 与 `clientd.exe`
+  - Windows 构建不再依赖 MSYS2 的 `opus` / `gtest` 二进制兼容性
+  - `BUILD_TESTING=ON` 且未安装 GoogleTest 时，配置阶段会警告并跳过项目测试目标，
+    但不会阻塞主程序构建
+
+### 15. Windows `WASAPI loopback` 本机回环验证
+
+- 已执行：
+  - 在显式注入 `vcvars64.bat` 环境后从零配置：
+    `cmake -S . -B build-windows-verify -G "NMake Makefiles" -DBUILD_TESTING=ON`
+  - 在同一 MSVC 环境中完整构建：
+    `cmake --build build-windows-verify`
+  - 直接运行：
+    `build-windows-verify/hostd.exe --host 127.0.0.1 --port 50000 --source wasapi --seconds 1`
+  - 启动本地接收端并再次回环发送：
+    `build-windows-verify/clientd.exe --port 50001 --seconds 2`
+    `build-windows-verify/hostd.exe --host 127.0.0.1 --port 50001 --source wasapi --seconds 1`
+- 结果：
+  - 新建的 `build-windows-verify` 目录已可从零完成配置与整库构建
+  - `hostd --source wasapi` 已在当前 Windows 主机上真实启动默认渲染设备 loopback 采集，
+    并成功发送 `100` 帧 UDP 音频
+  - `clientd` 本地回环接收结果为：
+    `Decoded frames=100 samples=48000 latency_ms=0`
+  - 这说明当前 Windows 路线已经不只是“编译级通过”，而是已验证
+    `WASAPI loopback -> Opus 编码 -> UDP 发送 -> UDP 接收 -> Opus 解码`
+    的本机真实运行链路
+
+### 16. Windows -> Android 模拟器 `WASAPI loopback` 端到端联调
+
+- 已执行：
+  - 在 Windows 宿主机启动 Android 模拟器，并确认：
+    - `adb devices -l`
+  - 为模拟器添加 UDP 端口重定向：
+    - `adb emu redir add udp:50000:50000`
+  - 启动 Android 客户端并通过 UI 自动点击 `START RECEIVER`
+  - 在宿主机本地生成 `48 kHz / 2ch / 16-bit PCM` 测试 WAV，
+    并通过 PowerShell `System.Media.SoundPlayer` 从默认输出设备播放
+  - 在宿主机执行：
+    - `build-windows-verify/hostd.exe --host 127.0.0.1 --port 50000 --source wasapi --seconds 10`
+  - 通过 `adb logcat -d -s NetworkSpeaker NetworkSpeakerNative AndroidRuntime` 观察播放日志
+- 结果：
+  - Android 客户端 UI 状态已进入：
+    - `Listening on UDP 50000 from any sender.`
+  - Windows `hostd --source wasapi` 已在本轮验证中成功发送：
+    - `Sent 1000 frames to 127.0.0.1:50000`
+  - Android `logcat` 已确认：
+    - `NetworkSpeakerNative: ClientSession started on UDP port 50000 hostFilter=<any>`
+    - `NetworkSpeaker: AudioTrack started sampleRate=48000 channels=2`
+    - `NetworkSpeaker: PCM write #1 samplesPerChannel=480`
+    - `...`
+    - `NetworkSpeaker: PCM write #1000 samplesPerChannel=480`
+  - 这说明截至 `2026-04-11`，当前 Windows 开发环境中已经跑通：
+    - 电脑上播放音频
+    - Windows `WASAPI loopback` 采集默认声卡输出
+    - `hostd` 将音频流复制到 Android 模拟器客户端
+    - Android 客户端收到音频流并持续驱动 `AudioTrack` 扬声器播放路径
+  - 已将上述流程固化为：
+    - `tools/windows_android_emulator_e2e.ps1`
+
+### 17. Windows -> Android 模拟器短时 PowerShell 联调回归
+
+- 已执行：
+  - 在 Windows 宿主机生成 2 秒测试音并从默认输出设备播放
+  - 通过 `adb` 启动 Android 模拟器中的接收端，并确认状态：
+    - `Listening on UDP 50000 from any sender.`
+  - 在宿主机执行短时发送：
+    - `build-windows-verify/hostd.exe --host 127.0.0.1 --port 50000 --source wasapi --seconds 3`
+  - 通过 `adb logcat -d -s NetworkSpeaker NetworkSpeakerNative AndroidRuntime` 抓取关键日志
+- 结果：
+  - `hostd` 在 `2026-04-11` 的本轮短测中成功发送：
+    - `Sent 300 frames to 127.0.0.1:50000`
+  - Android 客户端日志已确认：
+    - `NetworkSpeakerNative: ClientSession started on UDP port 50000 hostFilter=<any>`
+    - `NetworkSpeaker: AudioTrack started sampleRate=48000 channels=2`
+    - `NetworkSpeaker: PCM write #1 samplesPerChannel=480`
+    - `...`
+    - `NetworkSpeaker: PCM write #300 samplesPerChannel=480`
+  - 本轮验证命令在约 8 秒内返回，说明短时内联 PowerShell 命令可以稳定完成联调而不会长时间阻塞
+  - 对比之下，`tools/windows_android_emulator_e2e.ps1` 当前环境下仍存在 PowerShell 子进程收尾阻塞风险，后续联调应优先采用短时内联命令
+
 ## 当前遗留项
 
 ### 1. 平台实现
 
-- Windows `WASAPI loopback` 仍是占位实现
+- Windows `WASAPI loopback` 已完成本机回环验证，并已补 Windows -> Android 模拟器端到端联调记录，但尚未补 Windows -> Android 真机播放联调记录
 - Linux 目前只完成了 `PulseAudio` 路线，尚未扩展更多后端策略
 
 ### 2. Android 产品化
@@ -437,6 +554,8 @@
   - 桌面构建
   - 单元测试
   - 协议级集成测试
+  - Windows 主机 `hostd --source wasapi` 到本机 `clientd` 的 UDP 回环链路
+  - Windows 主机播放音频 -> `hostd --source wasapi` -> Android 模拟器 `AudioTrack` 播放链路
   - Android APK 构建
   - 桌面端 `hostd` 到 Android 模拟器的 UDP 发包链路
   - 宿主机静音状态下，`PulseAudio` monitor source 到 Android 模拟器播放链路
@@ -454,6 +573,9 @@
   - `hostd`
   - Android APK
 - 记录 `hostd --source pulse` 默认持续发送模式下的长时间运行稳定性
+- 如需再次复现当前 Windows + Android 模拟器链路，优先使用：
+  - 短时内联 PowerShell 命令
+  - `hostd --source wasapi --seconds 3` 或 `--seconds 4`
 - 如果继续使用 Android 模拟器联调，可固化 `adb emu redir add udp:50000:50000` 的测试步骤
-- 完成 Windows `WASAPI loopback` 真正实现
+- 在 Windows 真机上验证 `hostd --source wasapi` 到 Android 真机的局域网播放效果
 - 基于真实丢包与延迟数据决定是否引入 FEC

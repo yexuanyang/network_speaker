@@ -10,13 +10,56 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(CTest)
 include(GNUInstallDirs)
 
-find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
+set(NSPEAKER_GTEST_TARGET "")
 
-pkg_check_modules(OPUS REQUIRED IMPORTED_TARGET opus)
-pkg_check_modules(GTEST REQUIRED IMPORTED_TARGET gtest)
+if(WIN32)
+    option(NSPEAKER_USE_BUNDLED_OPUS "Build Opus from third_party/opus" ON)
+else()
+    option(NSPEAKER_USE_BUNDLED_OPUS "Build Opus from third_party/opus" OFF)
+endif()
 
-if(UNIX AND NOT APPLE)
+find_package(PkgConfig QUIET)
+
+set(NSPEAKER_OPUS_TARGET "")
+if(NOT NSPEAKER_USE_BUNDLED_OPUS)
+    find_package(Opus CONFIG QUIET)
+    if(TARGET Opus::opus)
+        set(NSPEAKER_OPUS_TARGET Opus::opus)
+    elseif(PkgConfig_FOUND)
+        pkg_check_modules(OPUS QUIET IMPORTED_TARGET opus)
+        if(TARGET PkgConfig::OPUS)
+            set(NSPEAKER_OPUS_TARGET PkgConfig::OPUS)
+        endif()
+    endif()
+endif()
+
+if(NSPEAKER_OPUS_TARGET STREQUAL "")
+    set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+    set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+    set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+    set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+    set(NSPEAKER_SAVED_BUILD_TESTING ${BUILD_TESTING})
+    set(BUILD_TESTING OFF)
+    add_subdirectory(third_party/opus EXCLUDE_FROM_ALL)
+    set(BUILD_TESTING ${NSPEAKER_SAVED_BUILD_TESTING})
+    set(NSPEAKER_OPUS_TARGET Opus::opus)
+endif()
+
+if(BUILD_TESTING)
+    find_package(GTest CONFIG QUIET)
+    if(TARGET GTest::gtest)
+        set(NSPEAKER_GTEST_TARGET GTest::gtest)
+    elseif(PkgConfig_FOUND)
+        pkg_check_modules(GTEST QUIET IMPORTED_TARGET gtest)
+        if(TARGET PkgConfig::GTEST)
+            set(NSPEAKER_GTEST_TARGET PkgConfig::GTEST)
+        endif()
+    endif()
+endif()
+
+if(PkgConfig_FOUND AND UNIX AND NOT APPLE)
     pkg_check_modules(PULSE IMPORTED_TARGET libpulse)
     pkg_check_modules(PULSE_SIMPLE IMPORTED_TARGET libpulse-simple)
 endif()
@@ -46,7 +89,7 @@ add_library(codec_opus STATIC
     libs/codec_opus/src/opus_codec.cpp)
 target_include_directories(codec_opus PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/libs/codec_opus/include)
-target_link_libraries(codec_opus PUBLIC audio_base PkgConfig::OPUS)
+target_link_libraries(codec_opus PUBLIC audio_base ${NSPEAKER_OPUS_TARGET})
 
 add_library(host_audio STATIC
     server/hostd/src/capture_factory.cpp
@@ -84,7 +127,7 @@ add_executable(clientd
     client/core/src/main.cpp)
 target_link_libraries(clientd PRIVATE client_core)
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND NOT NSPEAKER_GTEST_TARGET STREQUAL "")
     add_executable(network_speaker_tests
         tests/test_main.cpp
         tests/audio_packet_test.cpp
@@ -98,7 +141,9 @@ if(BUILD_TESTING)
         host_audio
         codec_opus
         transport
-        PkgConfig::GTEST
+        ${NSPEAKER_GTEST_TARGET}
         Threads::Threads)
     add_test(NAME network_speaker_tests COMMAND network_speaker_tests)
+elseif(BUILD_TESTING)
+    message(WARNING "GoogleTest not found. Skipping network_speaker_tests target.")
 endif()

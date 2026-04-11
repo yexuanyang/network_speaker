@@ -5,6 +5,7 @@
 
 build/
 build-nocache/
+build-windows*/
 cmake-build-*/
 compile_commands.json
 
