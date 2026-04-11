@@ -1,6 +1,9 @@
 .cache/
 .codex
 .gradle-home/
+.gradle-home-windows/
+.gw/
+.home/
 .idea/
 
 build/
