@@ -1,0 +1,25 @@
+<resources>
+    <string name="app_name">NetworkSpeaker</string>
+    <string name="connection_summary">Receive UDP audio on this device. Leave sender IPv4 empty to accept packets from any host.</string>
+    <string name="sender_host_label">Sender IPv4 Filter</string>
+    <string name="sender_host_hint">Optional, for example 192.168.1.10</string>
+    <string name="listen_port_label">Listen Port</string>
+    <string name="listen_port_hint">50000</string>
+    <string name="route_hint_label">Desktop sender target</string>
+    <string name="route_hint_ready">Run hostd with --host %1$s --port %2$d</string>
+    <string name="route_hint_unavailable">Current device IPv4 is unavailable. Use this device\'s LAN IPv4 with port %1$d.</string>
+    <string name="status_label">Status</string>
+    <string name="status_stopped">Receiver stopped.</string>
+    <string name="status_listening_any">Listening on UDP %1$d from any sender.</string>
+    <string name="status_listening_filtered">Listening on UDP %1$d from %2$s.</string>
+    <string name="start_receiver">Start Receiver</string>
+    <string name="stop_receiver">Stop Receiver</string>
+    <string name="invalid_port">Enter a UDP port between 1 and 65535.</string>
+    <string name="invalid_sender_ipv4">Enter a valid IPv4 address or leave it blank.</string>
+    <string name="notification_channel_name">Receiver Playback</string>
+    <string name="notification_channel_description">Keeps the UDP receiver alive while audio is playing in the background.</string>
+    <string name="notification_title">NetworkSpeaker receiver is running</string>
+    <string name="notification_listening_any">Receiving UDP audio on port %1$d from any sender.</string>
+    <string name="notification_listening_filtered">Receiving UDP audio on port %1$d from %2$s.</string>
+    <string name="notification_stop_action">Stop</string>
+</resources>
