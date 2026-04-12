@@ -11,7 +11,7 @@ namespace nspeaker::server {
 
 class UdpAudioSender {
 public:
-    UdpAudioSender(std::string host, std::uint16_t port);
+    UdpAudioSender(std::string host, std::uint16_t port, std::uint32_t stream_id = 1);
 
     bool Open();
     bool Send(std::uint32_t sequence, const audio::PcmFrame& pcm, std::span<const std::uint8_t> opus);
@@ -19,6 +19,7 @@ public:
 private:
     std::string host_;
     std::uint16_t port_;
+    std::uint32_t stream_id_;
     transport::UdpSocket socket_;
 };
 

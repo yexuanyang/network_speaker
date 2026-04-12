@@ -93,6 +93,13 @@ bool OpusDecoder::Decode(std::span<const std::uint8_t> opus, std::uint16_t frame
     return decoded == frame_samples;
 }
 
+bool OpusDecoder::Reset() {
+    if (!ok()) {
+        return false;
+    }
+    return opus_decoder_ctl(impl_->handle, OPUS_RESET_STATE) == OPUS_OK;
+}
+
 bool OpusDecoder::ok() const noexcept {
     return impl_ != nullptr && impl_->ok;
 }

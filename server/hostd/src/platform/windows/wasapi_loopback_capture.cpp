@@ -40,6 +40,27 @@ constexpr double kCenterMixGain = 0.7071067811865476;
 constexpr double kLfeMixGain = 0.5;
 constexpr auto kFrameDuration = std::chrono::milliseconds(10);
 
+ERole ToDeviceRole(WasapiLoopbackRole role) {
+    switch (role) {
+    case WasapiLoopbackRole::kMultimedia:
+        return eMultimedia;
+    case WasapiLoopbackRole::kConsole:
+        return eConsole;
+    case WasapiLoopbackRole::kCommunications:
+        return eCommunications;
+    case WasapiLoopbackRole::kAuto:
+    default:
+        return eMultimedia;
+    }
+}
+
+std::vector<ERole> CandidateRoles(WasapiLoopbackRole role) {
+    if (role == WasapiLoopbackRole::kAuto) {
+        return {eMultimedia, eConsole, eCommunications};
+    }
+    return {ToDeviceRole(role)};
+}
+
 struct CoTaskMemDeleter {
     void operator()(WAVEFORMATEX* format) const noexcept {
         if (format != nullptr) {
@@ -140,9 +161,11 @@ float DecodePcmSample(const std::byte* sample_bytes, int bits_per_sample, int va
 #endif
 
 struct WasapiLoopbackCapture::Impl {
-    explicit Impl(std::shared_ptr<audio::Clock> capture_clock) : clock(std::move(capture_clock)) {}
+    explicit Impl(std::shared_ptr<audio::Clock> capture_clock, WasapiLoopbackRole capture_role)
+        : clock(std::move(capture_clock)), role(capture_role) {}
 
     std::shared_ptr<audio::Clock> clock;
+    WasapiLoopbackRole role = WasapiLoopbackRole::kAuto;
 
 #ifdef _WIN32
     std::chrono::steady_clock::time_point next_tick{};
@@ -399,8 +422,9 @@ struct WasapiLoopbackCapture::Impl {
 #endif
 };
 
-WasapiLoopbackCapture::WasapiLoopbackCapture(std::shared_ptr<audio::Clock> clock)
-    : impl_(std::make_unique<Impl>(std::move(clock))) {}
+WasapiLoopbackCapture::WasapiLoopbackCapture(std::shared_ptr<audio::Clock> clock,
+                                             WasapiLoopbackRole role)
+    : impl_(std::make_unique<Impl>(std::move(clock), role)) {}
 
 WasapiLoopbackCapture::~WasapiLoopbackCapture() {
 #ifdef _WIN32
@@ -426,7 +450,15 @@ bool WasapiLoopbackCapture::Start() {
     }
 
     Microsoft::WRL::ComPtr<IMMDevice> device;
-    if (FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, device.GetAddressOf()))) {
+    bool found_device = false;
+    for (const auto role : CandidateRoles(impl_->role)) {
+        device.Reset();
+        if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, role, device.GetAddressOf()))) {
+            found_device = true;
+            break;
+        }
+    }
+    if (!found_device) {
         impl_->Shutdown();
         return false;
     }

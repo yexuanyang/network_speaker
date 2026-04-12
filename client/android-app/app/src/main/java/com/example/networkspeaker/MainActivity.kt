@@ -1,6 +1,9 @@
 package com.example.networkspeaker
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.os.Bundle
 import android.widget.Button
@@ -16,6 +19,29 @@ class MainActivity : AppCompatActivity() {
     private lateinit var listenPortInput: EditText
     private lateinit var routeHintView: TextView
     private lateinit var statusView: TextView
+
+    private val statusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != SpeakerService.ACTION_STATUS) {
+                return
+            }
+            val status = intent.getStringExtra(SpeakerService.EXTRA_STATUS).orEmpty()
+            val host = intent.getStringExtra(SpeakerService.EXTRA_HOST).orEmpty()
+            val port = intent.getIntExtra(SpeakerService.EXTRA_PORT, ConnectionConfig.DEFAULT_PORT)
+            when (status) {
+                "starting" -> statusView.text = getString(R.string.status_starting, port)
+                "listening" -> {
+                    statusView.text = ConnectionConfig(host, port).describeStatus(resourceStatusStrings)
+                }
+                "failed" -> {
+                    statusView.text = getString(R.string.status_failed, port)
+                }
+                "stopped" -> {
+                    statusView.text = getString(R.string.status_stopped)
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +76,21 @@ class MainActivity : AppCompatActivity() {
         statusView.text = getString(R.string.status_stopped)
     }
 
+    override fun onStart() {
+        super.onStart()
+        ContextCompat.registerReceiver(
+            this,
+            statusReceiver,
+            IntentFilter(SpeakerService.ACTION_STATUS),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    override fun onStop() {
+        unregisterReceiver(statusReceiver)
+        super.onStop()
+    }
+
     private fun startReceiver() {
         val listenPort = parseListenPort() ?: return
         val config = ConnectionConfig(
@@ -78,7 +119,7 @@ class MainActivity : AppCompatActivity() {
                         validation.config.listenPort
                     )
                 )
-                statusView.text = validation.config.describeStatus(resourceStatusStrings)
+                statusView.text = getString(R.string.status_starting, validation.config.listenPort)
             }
         }
     }

@@ -526,17 +526,140 @@
   - 本轮验证命令在约 8 秒内返回，说明短时内联 PowerShell 命令可以稳定完成联调而不会长时间阻塞
   - 对比之下，`tools/windows_android_emulator_e2e.ps1` 当前环境下仍存在 PowerShell 子进程收尾阻塞风险，后续联调应优先采用短时内联命令
 
+### 18. Windows -> Android 模拟器耳机听感验证
+
+- 已执行：
+  - 在 `2026-04-12` 将 Android 模拟器音频输出切到耳机设备 `K02BS`
+  - 在 `2026-04-12` 将 Windows 默认音频输出切到显示器音频设备 `F24G3`
+  - 启动 Android 模拟器客户端接收端，确认状态为：
+    - `Listening on UDP 50000 from any sender.`
+  - 在 Windows 宿主机执行：
+    - `build-windows-verify/hostd.exe --host 127.0.0.1 --port 50000 --source wasapi --seconds 5`
+  - 在 Windows 宿主机播放 3 秒测试音
+  - 通过 `adb logcat -d -s NetworkSpeaker NetworkSpeakerNative AndroidRuntime` 确认客户端持续写入 PCM
+- 结果：
+  - Android 客户端日志已确认：
+    - `NetworkSpeakerNative: ClientSession started on UDP port 50000 hostFilter=<any>`
+    - `NetworkSpeaker: AudioTrack started sampleRate=48000 channels=2`
+    - `NetworkSpeaker: PCM write #1 samplesPerChannel=480`
+    - `...`
+    - `NetworkSpeaker: PCM write #450 samplesPerChannel=480`
+  - Windows `hostd --source wasapi` 在本轮验证中成功发送：
+    - `Sent 500 frames to 127.0.0.1:50000`
+  - 已完成用户侧听感确认：
+    - 可通过耳机 `K02BS` 实际听到来自 Windows 默认输出 `F24G3` 的测试音
+  - 这说明截至 `2026-04-12`，当前 Windows -> Android 模拟器链路已经不只是日志级验证，
+    而是完成了“实际出声到目标耳机设备”的端到端听感验证
+
+### 19. Android 接收端真实启动状态修正
+
+- 已完成：
+  - `NativeBridge.nativeStart(...)` 从 `void` 改为返回 `Boolean`
+  - `SpeakerService` 改为根据 native 接收端真实启动结果发布状态，而不是乐观地直接显示已监听
+  - `MainActivity` 改为订阅服务状态广播，界面状态更新路径调整为：
+    - `Starting receiver on UDP ...`
+    - `Listening on UDP ...`
+    - `Receiver failed to start on UDP ...`
+    - `Receiver stopped.`
+- 目的：
+  - 避免此前“界面已显示 Listening，但 UDP 接收线程实际上尚未真正绑定成功”的误导性状态
+  - 为后续排查真机局域网短时联调偶发失败提供更可靠的前端状态依据
+- 说明：
+  - 该轮 Android 代码修改后，APK 由用户在 Android Studio 中手动完成构建与安装
+
+### 20. Windows -> Android 真机纯音与系统音频联调
+
+- 联调环境：
+  - Android 真机与 Windows 主机位于同一局域网
+  - Android 真机 IPv4：
+    - `10.29.25.86`
+  - Android 客户端监听：
+    - `0.0.0.0:50000`
+- 已执行：
+  - 先使用纯音源验证网络与真机播放链路：
+    - `build-windows-verify/hostd.exe --host 10.29.25.86 --port 50000 --source sine --seconds 4`
+  - 再使用 Windows 默认输出 loopback 验证真实系统音频链路：
+    - `build-windows-verify/hostd.exe --host 10.29.25.86 --port 50000 --source wasapi --seconds 6`
+  - 在 Windows 端同步播放测试音
+- 结果：
+  - `--source sine` 已确认可通过 Android 真机扬声器稳定听到蜂鸣声
+  - `--source wasapi` 已确认可通过 Android 真机扬声器听到来自 Windows 默认输出的测试音
+  - 这说明截至 `2026-04-12`，当前项目已经完成：
+    - Windows 主机 -> Android 真机的真实局域网端到端听感验证
+    - 不再局限于模拟器或日志级验证
+
+### 21. Windows 浏览器视频音频角色定位
+
+- 现象：
+  - Windows 浏览器播放视频时，默认 `wasapi` 路径并不能稳定把视频声音转发到 Android 真机
+- 已执行：
+  - 对 Windows `WASAPI` 三类默认渲染角色分别做了分段验证：
+    - `console`
+    - `multimedia`
+    - `communications`
+  - 单独对 `multimedia` 角色执行长一些的浏览器视频联调：
+    - `build-windows-verify/hostd.exe --host 10.29.25.86 --port 50000 --source wasapi --wasapi-role multimedia --seconds 12`
+- 结果：
+  - 浏览器视频声音在 `multimedia` 角色下可以稳定转发到 Android 真机
+  - 说明当前这台 Windows 机器上，浏览器视频对应的默认渲染角色是：
+    - `multimedia`
+- 已完成的代码修正：
+  - `hostd` 新增：
+    - `--wasapi-role auto|multimedia|console|communications`
+  - Windows `WASAPI loopback` 默认策略改为：
+    - 优先 `multimedia`
+    - 回退 `console`
+    - 再回退 `communications`
+  - 该修正用于提升浏览器视频、媒体播放器等常见多媒体场景的命中率
+
+### 22. 多次启停 `hostd` 的接收稳定性修复
+
+- 现象：
+  - 在 Android 真机持续保持 `Listening on ...` 的情况下，
+    第一次启动 `hostd --source wasapi --wasapi-role multimedia` 可以正常听到浏览器声音，
+    但停止后再次启动，后续轮次客户端界面无变化却完全没有声音
+- 问题定位：
+  - `hostd` 每次重启后，发送包序列号 `sequence` 都会从 `0` 重新开始
+  - 客户端 `PlayerPipeline` 会继续沿用上一轮流的 `expected_sequence`
+  - 因此第二轮及之后的新包会被 `JitterBuffer` 当成旧包 / 过晚包丢弃，
+    表现为“界面仍显示 Listening，但没有任何声音输出”
+- 已完成的代码修正：
+  - 发送端为每次 `hostd` 启动生成新的 `stream_id`
+  - `UdpAudioSender` 发送时显式写入当前轮次的 `stream_id`
+  - 客户端在首次收包或检测到 `stream_id` 切换时，
+    重置 `JitterBuffer`、Opus 解码器状态与 `expected_sequence`
+  - `JitterBuffer` 新增显式 `Reset()`
+  - `IAudioDecoder` / `OpusDecoder` 新增显式 `Reset()`
+  - 已补充回归测试，覆盖：
+    - 首包 `sequence != 0` 时的接收
+    - 发送端重启后 `stream_id` 切换时的重新接收
+- 已执行：
+  - 在 Windows MSVC 环境中重新构建：
+    - `cmake --build build-windows-verify`
+  - 做本机回环稳定性验证：
+    - 保持同一个 `clientd` 在 `50001` 端口持续监听 `12` 秒
+    - 连续 3 次启动：
+      - `build-windows-verify/hostd.exe --host 127.0.0.1 --port 50001 --source sine --seconds 2`
+- 结果：
+  - 3 轮 `hostd` 均成功发送：
+    - 每轮 `Sent 200 frames to 127.0.0.1:50001`
+  - 同一个未重启的 `clientd` 最终输出：
+    - `Decoded frames=600 samples=288000 latency_ms=12`
+  - 这说明“客户端只接收第一轮、后续重启后无声”的桌面侧核心问题已修复
+- 说明：
+  - Android 客户端仍需用户基于本轮代码重新构建并安装新版 APK，
+    再在真机上复测多轮启停场景
+
 ## 当前遗留项
 
 ### 1. 平台实现
 
-- Windows `WASAPI loopback` 已完成本机回环验证，并已补 Windows -> Android 模拟器端到端联调记录，但尚未补 Windows -> Android 真机播放联调记录
+- Windows `WASAPI loopback` 已完成本机回环验证、Windows -> Android 模拟器端到端联调记录，以及 Windows -> Android 真机播放联调记录
 - Linux 目前只完成了 `PulseAudio` 路线，尚未扩展更多后端策略
 
 ### 2. Android 产品化
 
-- Android 前台服务与常驻通知已补齐，但更完善的后台保活策略仍待继续完善
-- 尚未做真机联调结果记录
+- Android 前台服务与常驻通知已补齐，并已补接收端真实启动状态回传；但更完善的后台保活策略仍待继续完善
 - Android 工程尚未补 instrumentation tests，也尚未覆盖 `Service`/通知交互等组件级测试
 - 连接配置仍依赖手动填写发送端 IPv4，尚未做自动发现、配对流程或更明确的过滤提示
 
@@ -555,19 +678,26 @@
   - 单元测试
   - 协议级集成测试
   - Windows 主机 `hostd --source wasapi` 到本机 `clientd` 的 UDP 回环链路
+  - 同一个 `clientd` 持续监听时，多次重启 `hostd` 的本机回环接收恢复链路
   - Windows 主机播放音频 -> `hostd --source wasapi` -> Android 模拟器 `AudioTrack` 播放链路
+  - Windows 默认输出 `F24G3` -> Android 模拟器 -> 耳机 `K02BS` 的实际听感验证
+  - Windows 主机 `hostd --source sine` -> Android 真机扬声器播放链路
+  - Windows 主机 `hostd --source wasapi` -> Android 真机扬声器播放链路
+  - Windows 浏览器视频 -> `hostd --source wasapi --wasapi-role multimedia` -> Android 真机扬声器播放链路
   - Android APK 构建
   - 桌面端 `hostd` 到 Android 模拟器的 UDP 发包链路
   - 宿主机静音状态下，`PulseAudio` monitor source 到 Android 模拟器播放链路
   - 宿主机 HDMI 输出 -> `hostd` -> Android 模拟器 -> 宿主机内置声卡回放链路
 - 仍未完成：
-  - Windows/Linux 到 Android 真机的端到端听感验证
+  - Android 真机安装新版客户端后的多轮 `hostd` 启停回归验证
   - 局域网延迟指标验证
   - 长时间稳定性验证
   - 宿主机环境下 `hostd` 默认无限持续发送的长时间实机运行记录
 
 ## 下一步建议
 
+- 先基于本轮修复重新构建并安装 Android 客户端，
+  在真机上重复“浏览器持续播放 + 多次启停 `hostd --source wasapi --wasapi-role multimedia`”场景
 - 在真机上验证前台通知、后台驻留与熄屏播放行为
 - 在真实局域网环境中联调：
   - `hostd`
@@ -577,5 +707,8 @@
   - 短时内联 PowerShell 命令
   - `hostd --source wasapi --seconds 3` 或 `--seconds 4`
 - 如果继续使用 Android 模拟器联调，可固化 `adb emu redir add udp:50000:50000` 的测试步骤
-- 在 Windows 真机上验证 `hostd --source wasapi` 到 Android 真机的局域网播放效果
+- 在 Windows 真机上继续验证更多真实音源的局域网播放效果，例如：
+  - 浏览器视频
+  - 本地媒体播放器
+  - 不同默认输出设备之间切换后的行为
 - 基于真实丢包与延迟数据决定是否引入 FEC

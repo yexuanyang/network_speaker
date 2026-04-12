@@ -10,7 +10,7 @@
 #include "nspeaker/client/callback_audio_sink.h"
 #include "nspeaker/client/client_session.h"
 
-extern "C" JNIEXPORT void JNICALL
+extern "C" JNIEXPORT jboolean JNICALL
 Java_com_example_networkspeaker_NativeBridge_nativeStart(JNIEnv* env, jclass clazz,
                                                          jstring host, jint port);
 extern "C" JNIEXPORT void JNICALL
@@ -72,7 +72,7 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
     return JNI_VERSION_1_6;
 }
 
-extern "C" JNIEXPORT void JNICALL
+extern "C" JNIEXPORT jboolean JNICALL
 Java_com_example_networkspeaker_NativeBridge_nativeStart(JNIEnv* env, jclass clazz,
                                                          jstring host, jint port) {
     std::scoped_lock lock(g_mutex);
@@ -106,10 +106,12 @@ Java_com_example_networkspeaker_NativeBridge_nativeStart(JNIEnv* env, jclass cla
         __android_log_print(ANDROID_LOG_ERROR, kLogTag,
                             "Failed to start ClientSession on UDP port %d", port);
         g_session.reset();
+        return JNI_FALSE;
     } else {
         __android_log_print(ANDROID_LOG_INFO, kLogTag,
                             "ClientSession started on UDP port %d hostFilter=%s", port,
                             allowed_sender_ipv4.empty() ? "<any>" : allowed_sender_ipv4.c_str());
+        return JNI_TRUE;
     }
 }
 

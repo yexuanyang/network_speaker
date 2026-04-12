@@ -25,12 +25,16 @@ public:
     [[nodiscard]] const audio::StreamStats& stats() const noexcept;
 
 private:
+    void ResetForStream(std::uint32_t stream_id, std::uint32_t sequence);
+
     std::unique_ptr<codec::IAudioDecoder> decoder_;
     std::shared_ptr<audio::IAudioSink> sink_;
     std::shared_ptr<audio::Clock> clock_;
     transport::JitterBuffer jitter_;
     audio::StreamStats stats_{};
     std::uint32_t expected_sequence_ = 0;
+    std::uint32_t current_stream_id_ = 0;
+    bool has_stream_ = false;
     bool primed_ = false;
 };
 

@@ -7,10 +7,18 @@
 
 namespace nspeaker::server {
 
+enum class WasapiLoopbackRole {
+    kAuto,
+    kMultimedia,
+    kConsole,
+    kCommunications,
+};
+
 class WasapiLoopbackCapture final : public audio::IAudioCapture {
 public:
     explicit WasapiLoopbackCapture(
-        std::shared_ptr<audio::Clock> clock = std::make_shared<audio::SteadyClock>());
+        std::shared_ptr<audio::Clock> clock = std::make_shared<audio::SteadyClock>(),
+        WasapiLoopbackRole role = WasapiLoopbackRole::kAuto);
     ~WasapiLoopbackCapture() override;
 
     bool Start() override;

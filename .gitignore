@@ -14,8 +14,10 @@ compile_commands.json
 
 client/android-app/.gradle/
 client/android-app/.idea/
+client/android-app/.kotlin/
 client/android-app/app/.cxx/
 client/android-app/app/build/
 client/android-app/local.properties
 
 *.apk
+clientd-restart-test.out

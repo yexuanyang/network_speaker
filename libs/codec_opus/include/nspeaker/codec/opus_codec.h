@@ -22,6 +22,7 @@ public:
 
     virtual bool Decode(std::span<const std::uint8_t> opus, std::uint16_t frame_samples,
                         audio::PcmFrame& pcm) = 0;
+    virtual bool Reset() = 0;
 };
 
 class OpusEncoder final : public IAudioEncoder {
@@ -50,6 +51,7 @@ public:
 
     [[nodiscard]] bool Decode(std::span<const std::uint8_t> opus, std::uint16_t frame_samples,
                               audio::PcmFrame& pcm) override;
+    [[nodiscard]] bool Reset() override;
     [[nodiscard]] bool ok() const noexcept;
 
 private:

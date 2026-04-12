@@ -1,5 +1,7 @@
-#include <cstdlib>
 #include <csignal>
+#include <chrono>
+#include <cstdlib>
+#include <cstdint>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -18,7 +20,19 @@ void OnSignal(int /*signal*/) {
 
 void PrintUsage() {
     std::cerr << "Usage: hostd --host <ip> --port <port> [--source sine|pulse|wasapi]"
-              << " [--pulse-source <name>] [--seconds <n>]\n";
+              << " [--pulse-source <name>] [--wasapi-role auto|multimedia|console|communications]"
+              << " [--seconds <n>]\n";
+}
+
+std::uint32_t MakeStreamId() {
+    const auto now_us =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count();
+    const auto mixed = static_cast<std::uint64_t>(now_us) ^
+                       (static_cast<std::uint64_t>(now_us) >> 32U);
+    const auto stream_id = static_cast<std::uint32_t>(mixed & 0xFFFFFFFFU);
+    return stream_id == 0 ? 1U : stream_id;
 }
 
 }  // namespace
@@ -39,6 +53,8 @@ int main(int argc, char** argv) {
             capture_config.source = argv[++i];
         } else if (arg == "--pulse-source" && i + 1 < argc) {
             capture_config.pulse_source_name = argv[++i];
+        } else if (arg == "--wasapi-role" && i + 1 < argc) {
+            capture_config.wasapi_role = argv[++i];
         } else if (arg == "--seconds" && i + 1 < argc) {
             seconds = std::stoi(argv[++i]);
             if (*seconds <= 0) {
@@ -73,7 +89,7 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    nspeaker::server::UdpAudioSender sender(host, port);
+    nspeaker::server::UdpAudioSender sender(host, port, MakeStreamId());
     if (!sender.Open()) {
         std::cerr << "Failed to open UDP sender\n";
         return EXIT_FAILURE;

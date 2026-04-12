@@ -2,6 +2,15 @@
 
 namespace nspeaker::client {
 
+void PlayerPipeline::ResetForStream(std::uint32_t stream_id, std::uint32_t sequence) {
+    current_stream_id_ = stream_id;
+    expected_sequence_ = sequence;
+    primed_ = false;
+    has_stream_ = true;
+    jitter_.Reset();
+    decoder_->Reset();
+}
+
 PlayerPipeline::PlayerPipeline(std::unique_ptr<codec::IAudioDecoder> decoder,
                                std::shared_ptr<audio::IAudioSink> sink,
                                std::shared_ptr<audio::Clock> clock,
@@ -12,6 +21,10 @@ PlayerPipeline::PlayerPipeline(std::unique_ptr<codec::IAudioDecoder> decoder,
       jitter_(target_packets) {}
 
 bool PlayerPipeline::PushPacket(transport::AudioPacket packet) {
+    if (!has_stream_ || packet.header.stream_id != current_stream_id_) {
+        ResetForStream(packet.header.stream_id, packet.header.sequence);
+    }
+
     ++stats_.packets_received;
     return jitter_.Push(std::move(packet), expected_sequence_, stats_);
 }
@@ -28,6 +41,14 @@ std::size_t PlayerPipeline::DrainReady() {
     while (true) {
         auto packet = jitter_.PopNext(expected_sequence_);
         if (!packet.has_value()) {
+            const auto oldest_sequence = jitter_.OldestSequence();
+            if (oldest_sequence.has_value() && *oldest_sequence > expected_sequence_ &&
+                jitter_.Size() >= jitter_.target_packets()) {
+                stats_.packets_lost += *oldest_sequence - expected_sequence_;
+                expected_sequence_ = *oldest_sequence;
+                continue;
+            }
+
             ++stats_.playback_underruns;
             break;
         }

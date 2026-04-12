@@ -6,7 +6,7 @@ object NativeBridge {
     }
 
     @JvmStatic
-    external fun nativeStart(host: String, port: Int)
+    external fun nativeStart(host: String, port: Int): Boolean
     @JvmStatic
     external fun nativeStop()
 

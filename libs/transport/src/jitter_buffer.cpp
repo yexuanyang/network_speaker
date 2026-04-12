@@ -40,6 +40,17 @@ std::optional<AudioPacket> JitterBuffer::PopNext(std::uint32_t expected_sequence
     return packet;
 }
 
+std::optional<std::uint32_t> JitterBuffer::OldestSequence() const {
+    if (packets_.empty()) {
+        return std::nullopt;
+    }
+    return packets_.begin()->first;
+}
+
+void JitterBuffer::Reset() {
+    packets_.clear();
+}
+
 std::size_t JitterBuffer::Size() const noexcept {
     return packets_.size();
 }

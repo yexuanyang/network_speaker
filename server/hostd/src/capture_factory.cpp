@@ -6,6 +6,22 @@
 
 namespace nspeaker::server {
 
+std::optional<WasapiLoopbackRole> ParseWasapiLoopbackRole(const std::string& value) {
+    if (value == "auto") {
+        return WasapiLoopbackRole::kAuto;
+    }
+    if (value == "multimedia") {
+        return WasapiLoopbackRole::kMultimedia;
+    }
+    if (value == "console") {
+        return WasapiLoopbackRole::kConsole;
+    }
+    if (value == "communications") {
+        return WasapiLoopbackRole::kCommunications;
+    }
+    return std::nullopt;
+}
+
 std::unique_ptr<audio::IAudioCapture> CreateCapture(const CaptureConfig& config) {
     if (config.source == "sine") {
         return std::make_unique<SineWaveCapture>(config.sine_frequency_hz);
@@ -19,7 +35,12 @@ std::unique_ptr<audio::IAudioCapture> CreateCapture(const CaptureConfig& config)
 
 #ifdef _WIN32
     if (config.source == "wasapi") {
-        return std::make_unique<WasapiLoopbackCapture>();
+        const auto role = ParseWasapiLoopbackRole(config.wasapi_role);
+        if (!role.has_value()) {
+            return nullptr;
+        }
+        return std::make_unique<WasapiLoopbackCapture>(std::make_shared<audio::SteadyClock>(),
+                                                       *role);
     }
 #endif
 

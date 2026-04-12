@@ -4,8 +4,8 @@
 
 namespace nspeaker::server {
 
-UdpAudioSender::UdpAudioSender(std::string host, std::uint16_t port)
-    : host_(std::move(host)), port_(port) {}
+UdpAudioSender::UdpAudioSender(std::string host, std::uint16_t port, std::uint32_t stream_id)
+    : host_(std::move(host)), port_(port), stream_id_(stream_id) {}
 
 bool UdpAudioSender::Open() {
     return socket_.Open();
@@ -14,6 +14,7 @@ bool UdpAudioSender::Open() {
 bool UdpAudioSender::Send(std::uint32_t sequence, const audio::PcmFrame& pcm,
                           std::span<const std::uint8_t> opus) {
     transport::AudioPacket packet;
+    packet.header.stream_id = stream_id_;
     packet.header.sequence = sequence;
     packet.header.capture_ts_us = pcm.capture_ts_us;
     packet.header.frame_samples = static_cast<std::uint16_t>(pcm.samples_per_channel);

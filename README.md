@@ -1,143 +1,145 @@
 # network_speaker
 
-跨平台网络扬声器工程骨架。当前仓库已经落下下面这些可编译模块：
+`network_speaker` 用来把电脑当前播放的声音通过局域网转发到 Android 设备，让手机、平板或 Android 模拟器作为网络扬声器使用。
 
-- `libs/audio_base`
-  - 统一 `48 kHz / 2ch / float32 PCM` 帧格式
-  - 单调时钟和流统计结构
-- `libs/transport`
-  - 自定义 UDP 音频包头
-  - 包序列化/反序列化
-  - 抖动缓冲
-  - UDP socket 适配层
-- `libs/codec_opus`
-  - Opus 低延迟立体声编解码
-- `server/hostd`
-  - 发送端 CLI
-  - 正弦波采集源
-  - Linux `PulseAudio` 采集和默认 monitor source 自动发现
-  - Windows `WASAPI loopback` 默认渲染设备采集
-- `client/core`
-  - 接收端核心流水线
-  - 解码、抖动缓冲、统计
-  - `ClientSession` 持续接收线程
-  - 控制台客户端 `clientd`
-- `client/android-app`
-  - Android APK 薄 Kotlin 壳
-  - `AudioTrack` 浮点 PCM 播放
-  - JNI 到 `client/core` 的桥接
-- `tests`
-  - 包编解码、抖动缓冲、Opus、端到端协议级集成测试
+当前最成熟的使用方式是：
 
-## 构建
+- Windows 电脑作为发送端
+- Android 真机或 Android 模拟器作为接收端
+- 音频通过 UDP + Opus 低延迟编码传输
 
-```bash
-CCACHE_DISABLE=1 cmake -S . -B build
-CCACHE_DISABLE=1 cmake --build build -j4
-ctest --test-dir build --output-on-failure
-```
+## 适合谁
 
-`CCACHE_DISABLE=1` 是为了绕开当前环境里的只读 `ccache` 包装。
+- 想把 Windows 电脑的系统声音、浏览器视频声音转发到 Android 设备的人
+- 想验证“电脑到手机的低延迟网络扬声器”方案的人
+- 想继续完善这个项目的开发者
 
-当前开发机上的 Android SDK 根目录为：
+如果你是开发者，请直接看 [docs/CONTRIBUTE.md](docs/CONTRIBUTE.md)。
 
-```bash
-/home/yyx/Android/Sdk
-```
+## 当前支持情况
 
-当前项目依赖的组件包括：
+- Windows 发送端：
+  - `WASAPI loopback` 采集默认输出设备
+  - 支持浏览器/媒体播放器等系统输出音频转发
+- Android 接收端：
+  - 可配置 UDP 监听端口
+  - 可选发送端 IPv4 过滤
+  - 前台服务 + 常驻通知
+- Android 模拟器：
+  - 可以用于联调，但需要先做 UDP 端口重定向
+- Linux：
+  - 当前有 `PulseAudio` monitor source 路线
+  - 更偏实验性质，不是当前主用路径
 
-```text
-build-tools;35.0.0
-cmake;3.22.1
-ndk;27.1.12297006
-platform-tools
-platforms;android-35
-```
+## 快速开始
 
-`client/android-app/local.properties` 用于本地 SDK 路径配置，当前已加入 `.gitignore`，
-需要在各自环境中自行写入 `sdk.dir=...`。
+### 1. 启动 Android 客户端
 
-Android Gradle Wrapper 已生成在 `client/android-app/`，首次成功构建命令如下：
+在 Android 客户端中：
 
-```bash
-cd client/android-app
-export http_proxy=http://127.0.0.1:7897
-export https_proxy=http://127.0.0.1:7897
-export JAVA_HOME=/usr/lib/jvm/jdk-17.0.12-oracle-x64
-export GRADLE_USER_HOME=/home/yyx/workspaces/network_speaker/.gradle-home
-./gradlew assembleDebug
-```
+- 确认监听端口，例如 `50000`
+- 如果你不确定发送端地址，先把 `Sender IPv4 Filter` 留空
+- 点击 `Start Receiver`
+- 看到 `Listening on UDP ...` 再开始发送
 
-构建产物默认在：
+### 2. 在 Windows 上启动发送端
 
-```text
-client/android-app/app/build/outputs/apk/debug/app-debug.apk
-```
-
-Windows 推荐在 Visual Studio Developer PowerShell 或执行过 `vcvarsall.bat` 的终端中构建：
+真机局域网播放，最常用的是这条命令：
 
 ```powershell
-cmake -S . -B build-windows -G "NMake Makefiles" -DBUILD_TESTING=OFF
-cmake --build build-windows
+.\build-windows-verify\hostd.exe --host <手机IP> --port 50000 --source wasapi --wasapi-role multimedia
 ```
 
 说明：
 
-- Windows 下默认使用仓库内的 `third_party/opus`，不依赖 MSYS2 `pkg-config` 或 MinGW 预编译库
-- 若本机已安装兼容当前工具链的 GoogleTest，可启用 `-DBUILD_TESTING=ON`
-- 若未安装 GoogleTest，配置阶段会给出警告并跳过 `network_speaker_tests` 目标，不影响 `hostd` / `clientd` 构建
+- `<手机IP>` 换成 Android 设备在局域网内的 IPv4 地址
+- 浏览器视频、网页播放器这类场景，优先使用 `--wasapi-role multimedia`
+- 停止发送时，直接 `Ctrl+C`
 
-## 运行
+如果你只是想快速确认链路是否通，可以先发测试蜂鸣声：
 
-发送端：
-
-```bash
-./build/hostd --host 127.0.0.1 --port 50000 --source sine --seconds 5
+```powershell
+.\build-windows-verify\hostd.exe --host <手机IP> --port 50000 --source sine --seconds 4
 ```
 
-接收端：
+## 常见使用场景
 
-```bash
-./build/clientd --port 50000 --seconds 5
+### Windows 浏览器视频转发到 Android 真机
+
+```powershell
+.\build-windows-verify\hostd.exe --host 10.29.25.86 --port 50000 --source wasapi --wasapi-role multimedia
 ```
 
-当前沙箱限制本地 UDP 绑定，因此仓库内的自动化端到端测试使用“协议级内存回环”，而不直接依赖真实 socket。实际机器上运行 `hostd`/`clientd` 时可以验证真实网络链路。
+### Windows 默认系统输出转发到 Android 真机
 
-Windows 到 Android 模拟器的联调，当前建议优先使用短时 PowerShell 命令分步验证，而不是长时间脚本：
+```powershell
+.\build-windows-verify\hostd.exe --host 10.29.25.86 --port 50000 --source wasapi
+```
+
+### 发送测试蜂鸣声
+
+```powershell
+.\build-windows-verify\hostd.exe --host 10.29.25.86 --port 50000 --source sine --seconds 4
+```
+
+## Android 模拟器使用说明
+
+如果接收端是 Android 模拟器，不要直接把 `hostd` 发到 `10.0.2.16`。当前仓库里稳定可工作的方式是：
+
+1. 先做 UDP 端口重定向
+2. 然后把 `hostd` 发到 `127.0.0.1`
+
+示例：
 
 ```powershell
 $adb = 'C:\Users\11822\AppData\Local\Android\Sdk\platform-tools\adb.exe'
-$hostd = '.\build-windows-verify\hostd.exe'
 
 & $adb emu redir add udp:50000:50000
-& $adb shell am start -n com.example.networkspeaker/.MainActivity
-& $adb shell input tap 540 1228
-
-# 另开一个短命令窗口播放测试音后执行
-& $hostd --host 127.0.0.1 --port 50000 --source wasapi --seconds 3
+.\build-windows-verify\hostd.exe --host 127.0.0.1 --port 50000 --source sine --seconds 4
 ```
 
-说明：
+## 排查建议
 
-- 短时验证时，建议把 `hostd --seconds` 控制在 `3` 到 `4` 秒
-- 通过 `adb logcat -d -s NetworkSpeaker NetworkSpeakerNative AndroidRuntime` 可以确认 `ClientSession` 和 `PCM write` 日志
-- `tools/windows_android_emulator_e2e.ps1` 仍保留为实验脚本，但当前环境下存在 PowerShell 子进程收尾阻塞风险，不建议作为默认入口
-- 运行前需要 Android 模拟器已启动，且 `com.example.networkspeaker` 已安装到模拟器
-- 若当前模拟器中的 `com.example.networkspeaker` 与本地 APK 签名不一致，`adb install -r` 会失败，需要先卸载旧包再安装当前调试包
+### 客户端显示 `Listening on ...`，但没有声音
 
-## 当前实现边界
+优先检查：
 
-- 已完成：
-  - 核心模块拆分
-  - 可编译的 C++20 主工程
-  - Opus 低延迟编码链路
-  - 自定义包头与抖动缓冲
-  - Linux 默认 monitor source 自动发现
-  - Windows `WASAPI loopback` 本机 `hostd -> clientd` UDP 回环验证
-  - Windows 主机播放音频 -> `hostd --source wasapi` -> Android 模拟器 `AudioTrack` 端到端播放验证
-  - Android 壳工程和 `AudioTrack` 播放桥
-- 仍待继续：
-  - Windows 到 Android 真机的 `hostd --source wasapi` 播放联调记录
-  - Android 真机联调和前台通知完善
-  - FEC、加密、多声道扩展
+- Android 客户端监听端口是否和 `hostd --port` 一致
+- `Sender IPv4 Filter` 是否填错，拿不准就先留空
+- 真机和电脑是否在同一局域网
+- Windows 浏览器场景是否用了 `--wasapi-role multimedia`
+
+### 模拟器听不到声音
+
+优先检查：
+
+- 是否已经执行 `adb emu redir add udp:50000:50000`
+- `hostd` 是否发到了 `127.0.0.1` 而不是 `10.0.2.16`
+- 模拟器里的接收端是否已经进入 `Listening on UDP 50000 ...`
+
+### 真机播放一段时间后无声
+
+仓库当前已经针对接收侧丢包恢复补了修复。如果你遇到“放一会后没声音，重连又恢复”的情况，请优先使用最新代码重新构建 Android client 后再验证。
+
+当前这部分调试记录见 [debug.md](debug.md)。
+
+## 文档导航
+
+- 用户说明：当前文件
+- 开发参与说明：[docs/CONTRIBUTE.md](docs/CONTRIBUTE.md)
+- 架构设计：[docs/DESIGN.md](docs/DESIGN.md)
+- 里程碑与阶段进展：[progress.md](progress.md)
+- 当前调试记录：[debug.md](debug.md)
+
+## 当前边界
+
+- 已验证：
+  - Windows 主机到 Android 真机的局域网播放
+  - Windows 浏览器视频到 Android 真机的播放
+  - Windows 到 Android 模拟器的播放
+- 尚未完成：
+  - 自动发现与配对
+  - FEC
+  - 加密
+  - 多声道
+  - 更完善的 Android 后台保活策略

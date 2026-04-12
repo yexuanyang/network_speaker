@@ -22,12 +22,20 @@ class SpeakerService : Service() {
                 val host = intent?.getStringExtra(EXTRA_HOST).orEmpty().trim()
                 val port = intent?.getIntExtra(EXTRA_PORT, DEFAULT_PORT) ?: DEFAULT_PORT
                 Log.i(logTag, "Starting receiver hostFilter=${host.ifBlank { "<any>" }} port=$port")
+                publishStatus(ReceiverState.Starting(host, port))
                 startForeground(NOTIFICATION_ID, buildNotification(host, port))
                 NativeBridge.nativeStop()
                 AudioOutput.stop()
-                AudioOutput.start()
-                NativeBridge.nativeStart(host, port)
-                START_REDELIVER_INTENT
+                val started = NativeBridge.nativeStart(host, port)
+                if (started) {
+                    AudioOutput.start()
+                    publishStatus(ReceiverState.Listening(host, port))
+                    START_REDELIVER_INTENT
+                } else {
+                    publishStatus(ReceiverState.Failed(host, port))
+                    stopReceiver(publishStopped = false)
+                    START_NOT_STICKY
+                }
             }
             ACTION_STOP -> {
                 Log.i(logTag, "Stopping receiver by explicit action")
@@ -50,12 +58,19 @@ class SpeakerService : Service() {
         ensureNotificationChannel()
     }
 
-    private fun stopReceiver() {
+    private fun stopReceiver(publishStopped: Boolean = true) {
         NativeBridge.nativeStop()
         AudioOutput.stop()
         stopForeground(STOP_FOREGROUND_REMOVE)
+        if (publishStopped) {
+            publishStatus(ReceiverState.Stopped)
+        }
         Log.i(logTag, "Receiver stopped")
         stopSelf()
+    }
+
+    private fun publishStatus(state: ReceiverState) {
+        sendBroadcast(createStatusIntent(this, state).setPackage(packageName))
     }
 
     private fun buildNotification(host: String, port: Int): Notification {
@@ -111,8 +126,10 @@ class SpeakerService : Service() {
     companion object {
         private const val ACTION_START = "com.example.networkspeaker.action.START"
         private const val ACTION_STOP = "com.example.networkspeaker.action.STOP"
-        private const val EXTRA_HOST = "host"
-        private const val EXTRA_PORT = "port"
+        const val ACTION_STATUS = "com.example.networkspeaker.action.STATUS"
+        const val EXTRA_HOST = "host"
+        const val EXTRA_PORT = "port"
+        const val EXTRA_STATUS = "status"
         private const val DEFAULT_PORT = ConnectionConfig.DEFAULT_PORT
         private const val NOTIFICATION_CHANNEL_ID = "receiver"
         private const val NOTIFICATION_ID = 1
@@ -131,5 +148,26 @@ class SpeakerService : Service() {
         fun createStopIntent(context: Context): Intent {
             return createServiceIntent(context).setAction(ACTION_STOP)
         }
+
+        fun createStatusIntent(context: Context, state: ReceiverState): Intent {
+            val intent = Intent(ACTION_STATUS)
+                .putExtra(EXTRA_STATUS, state.status)
+                .putExtra(EXTRA_PORT, state.port)
+                .putExtra(EXTRA_HOST, state.host)
+            return intent.setPackage(context.packageName)
+        }
     }
+}
+
+sealed class ReceiverState(val status: String, open val host: String, open val port: Int) {
+    data class Starting(override val host: String, override val port: Int) :
+        ReceiverState("starting", host, port)
+
+    data class Listening(override val host: String, override val port: Int) :
+        ReceiverState("listening", host, port)
+
+    data class Failed(override val host: String, override val port: Int) :
+        ReceiverState("failed", host, port)
+
+    data object Stopped : ReceiverState("stopped", "", ConnectionConfig.DEFAULT_PORT)
 }
