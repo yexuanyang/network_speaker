@@ -117,7 +117,12 @@ Java_com_example_networkspeaker_NativeBridge_nativeStart(JNIEnv* env, jclass cla
         nspeaker::client::ClientSession::Config{
             .listen_port = static_cast<std::uint16_t>(port),
             .allowed_sender_ipv4 = allowed_sender_ipv4,
-            .pipeline_config = {},  // use PipelineConfig defaults (FastLock enabled, target=3)
+            .pipeline_config = nspeaker::client::PipelineConfig{
+                .startup_fast_lock_enabled = false,        // Disable FastLock for stable playback
+                .steady_target_packets = 6,                 // Deeper buffer for real devices
+                .stale_packet_threshold_ms = 0,             // No stale drop (reliable on LAN)
+                .late_frame_drop_threshold_ms = 0,          // No soft catch-up
+            },
             .poll_timeout = std::chrono::milliseconds(20),
         },
         sink);
