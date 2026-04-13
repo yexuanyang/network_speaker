@@ -21,7 +21,7 @@ public:
     struct Config {
         std::uint16_t listen_port = 50000;
         std::string allowed_sender_ipv4;
-        std::size_t jitter_target_packets = 6;
+        PipelineConfig pipeline_config;
         std::chrono::milliseconds poll_timeout{20};
     };
 

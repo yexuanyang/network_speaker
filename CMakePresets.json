@@ -1,0 +1,36 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 31,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-ninja-vcpkg",
+      "displayName": "Windows Ninja (vcpkg, tests on)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "ON",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-ninja-vcpkg",
+      "configurePreset": "windows-ninja-vcpkg"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-ninja-vcpkg",
+      "configurePreset": "windows-ninja-vcpkg",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

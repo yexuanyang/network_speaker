@@ -51,11 +51,26 @@ if(BUILD_TESTING)
     find_package(GTest CONFIG QUIET)
     if(TARGET GTest::gtest)
         set(NSPEAKER_GTEST_TARGET GTest::gtest)
-    elseif(PkgConfig_FOUND)
+    elseif(PkgConfig_FOUND AND NOT WIN32)
         pkg_check_modules(GTEST QUIET IMPORTED_TARGET gtest)
         if(TARGET PkgConfig::GTEST)
             set(NSPEAKER_GTEST_TARGET PkgConfig::GTEST)
         endif()
+    endif()
+    if(NOT NSPEAKER_GTEST_TARGET)
+        include(FetchContent)
+        FetchContent_Declare(
+            googletest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG        v1.14.0
+            GIT_CONFIG     "http.proxy=http://127.0.0.1:7897"
+                           "https.proxy=http://127.0.0.1:7897"
+        )
+        set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+        set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+        set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(googletest)
+        set(NSPEAKER_GTEST_TARGET GTest::gtest)
     endif()
 endif()
 

@@ -17,7 +17,9 @@ public:
     bool Push(AudioPacket packet, std::uint32_t expected_sequence, audio::StreamStats& stats);
     [[nodiscard]] std::optional<AudioPacket> PopNext(std::uint32_t expected_sequence);
     [[nodiscard]] std::optional<std::uint32_t> OldestSequence() const;
+    [[nodiscard]] std::optional<std::uint32_t> NewestSequence() const;
     void Reset();
+    void DiscardBefore(std::uint32_t min_sequence);
     [[nodiscard]] std::size_t Size() const noexcept;
     [[nodiscard]] bool Primed() const noexcept;
     [[nodiscard]] std::size_t target_packets() const noexcept;
