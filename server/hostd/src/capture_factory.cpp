@@ -40,7 +40,7 @@ std::unique_ptr<audio::IAudioCapture> CreateCapture(const CaptureConfig& config)
             return nullptr;
         }
         return std::make_unique<WasapiLoopbackCapture>(std::make_shared<audio::SteadyClock>(),
-                                                       *role);
+                                                       *role, config.wasapi_device_id);
     }
 #endif
 

@@ -28,6 +28,12 @@ public static class HostdCommandBuilder
         {
             arguments.Add("--wasapi-role");
             arguments.Add(ToWasapiRoleArgument(configuration.WasapiRole));
+
+            if (!string.IsNullOrEmpty(configuration.DeviceId))
+            {
+                arguments.Add("--device");
+                arguments.Add(configuration.DeviceId);
+            }
         }
 
         if (configuration.Seconds.HasValue)

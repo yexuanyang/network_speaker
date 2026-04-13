@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json.Serialization;
 
 namespace NetworkSpeaker.Launcher.Core;
 
@@ -16,15 +17,27 @@ public enum WasapiRoleOption
     Communications,
 }
 
+public sealed record AudioDeviceInfo(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("description")] string Description,
+    [property: JsonPropertyName("default")] bool IsDefault)
+{
+    public static AudioDeviceInfo DefaultSentinel { get; } = new(string.Empty, "(Default Device)", string.Empty, false);
+
+    public override string ToString() => Name;
+}
+
 public sealed record LaunchConfiguration(
     string Host,
     int Port,
     CaptureSource Source,
     WasapiRoleOption WasapiRole,
-    int? Seconds)
+    int? Seconds,
+    string? DeviceId = null)
 {
     public static LaunchConfiguration CreateDefault() =>
-        new(string.Empty, 50000, CaptureSource.Wasapi, WasapiRoleOption.Multimedia, null);
+        new(string.Empty, 50000, CaptureSource.Wasapi, WasapiRoleOption.Multimedia, null, null);
 }
 
 public sealed record ValidationResult(bool IsValid, string? ErrorMessage)

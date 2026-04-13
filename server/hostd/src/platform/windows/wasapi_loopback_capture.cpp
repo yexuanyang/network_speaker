@@ -9,6 +9,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -106,6 +107,20 @@ float ClampUnit(double sample) {
     return static_cast<float>(std::clamp(sample, -1.0, 1.0));
 }
 
+std::wstring Utf8ToWide(const std::string& utf8) {
+    if (utf8.empty()) {
+        return {};
+    }
+    const int len = MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()),
+                                        nullptr, 0);
+    if (len <= 0) {
+        return {};
+    }
+    std::wstring result(static_cast<std::size_t>(len), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), result.data(), len);
+    return result;
+}
+
 float DecodePcmSample(const std::byte* sample_bytes, int bits_per_sample, int valid_bits_per_sample) {
     if (bits_per_sample <= 0) {
         return 0.0F;
@@ -161,11 +176,14 @@ float DecodePcmSample(const std::byte* sample_bytes, int bits_per_sample, int va
 #endif
 
 struct WasapiLoopbackCapture::Impl {
-    explicit Impl(std::shared_ptr<audio::Clock> capture_clock, WasapiLoopbackRole capture_role)
-        : clock(std::move(capture_clock)), role(capture_role) {}
+    explicit Impl(std::shared_ptr<audio::Clock> capture_clock, WasapiLoopbackRole capture_role,
+                  std::string capture_device_id)
+        : clock(std::move(capture_clock)), role(capture_role),
+          device_id(std::move(capture_device_id)) {}
 
     std::shared_ptr<audio::Clock> clock;
     WasapiLoopbackRole role = WasapiLoopbackRole::kAuto;
+    std::string device_id;
 
 #ifdef _WIN32
     std::chrono::steady_clock::time_point next_tick{};
@@ -423,8 +441,9 @@ struct WasapiLoopbackCapture::Impl {
 };
 
 WasapiLoopbackCapture::WasapiLoopbackCapture(std::shared_ptr<audio::Clock> clock,
-                                             WasapiLoopbackRole role)
-    : impl_(std::make_unique<Impl>(std::move(clock), role)) {}
+                                             WasapiLoopbackRole role,
+                                             std::string device_id)
+    : impl_(std::make_unique<Impl>(std::move(clock), role, std::move(device_id))) {}
 
 WasapiLoopbackCapture::~WasapiLoopbackCapture() {
 #ifdef _WIN32
@@ -451,11 +470,19 @@ bool WasapiLoopbackCapture::Start() {
 
     Microsoft::WRL::ComPtr<IMMDevice> device;
     bool found_device = false;
-    for (const auto role : CandidateRoles(impl_->role)) {
-        device.Reset();
-        if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, role, device.GetAddressOf()))) {
+    if (!impl_->device_id.empty()) {
+        const auto wide_id = Utf8ToWide(impl_->device_id);
+        if (!wide_id.empty() &&
+            SUCCEEDED(enumerator->GetDevice(wide_id.c_str(), device.GetAddressOf()))) {
             found_device = true;
-            break;
+        }
+    } else {
+        for (const auto role : CandidateRoles(impl_->role)) {
+            device.Reset();
+            if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, role, device.GetAddressOf()))) {
+                found_device = true;
+                break;
+            }
         }
     }
     if (!found_device) {

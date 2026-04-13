@@ -14,6 +14,7 @@ struct CaptureConfig {
     std::string pulse_source_name;
     double sine_frequency_hz = 440.0;
     std::string wasapi_role = "auto";
+    std::string wasapi_device_id;
 };
 
 [[nodiscard]] std::unique_ptr<audio::IAudioCapture> CreateCapture(const CaptureConfig& config);

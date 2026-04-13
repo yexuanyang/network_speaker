@@ -258,3 +258,162 @@ public sealed class HostdLocatorTests
         }
     }
 }
+
+public sealed class HostdCommandBuilderDeviceTests
+{
+    [Fact]
+    public void IncludesDeviceArgumentWhenDeviceIdIsSet()
+    {
+        var configuration = new LaunchConfiguration(
+            "10.29.25.86",
+            50000,
+            CaptureSource.Wasapi,
+            WasapiRoleOption.Multimedia,
+            null,
+            "{0.0.0.00000000}.{some-guid}");
+
+        var command = HostdCommandBuilder.Build(@"C:\bundle\hostd.exe", configuration);
+
+        Assert.Contains("--device", command.Arguments);
+        Assert.Contains("{0.0.0.00000000}.{some-guid}", command.Arguments);
+        Assert.Contains("--device", command.DisplayCommandLine);
+    }
+
+    [Fact]
+    public void OmitsDeviceArgumentWhenDeviceIdIsNull()
+    {
+        var configuration = new LaunchConfiguration(
+            "127.0.0.1",
+            50000,
+            CaptureSource.Wasapi,
+            WasapiRoleOption.Multimedia,
+            null);
+
+        var command = HostdCommandBuilder.Build(@"C:\bundle\hostd.exe", configuration);
+
+        Assert.DoesNotContain("--device", command.Arguments);
+    }
+
+    [Fact]
+    public void OmitsDeviceArgumentWhenSourceIsSine()
+    {
+        var configuration = new LaunchConfiguration(
+            "127.0.0.1",
+            50000,
+            CaptureSource.Sine,
+            WasapiRoleOption.Multimedia,
+            null,
+            "{0.0.0.00000000}.{some-guid}");
+
+        var command = HostdCommandBuilder.Build(@"C:\bundle\hostd.exe", configuration);
+
+        Assert.DoesNotContain("--device", command.Arguments);
+    }
+}
+
+public sealed class VirtualAudioDetectorTests
+{
+    [Fact]
+    public void ReturnsTrueWhenVbCablePresent()
+    {
+        var devices = new List<AudioDeviceInfo>
+        {
+            new("id1", "Speakers (Realtek Audio)", "Realtek Audio", true),
+            new("id2", "CABLE Input (VB-Audio Virtual Cable)", "VB-Audio", false),
+        };
+
+        Assert.True(VirtualAudioDetector.ContainsVirtualAudioDevice(devices));
+    }
+
+    [Fact]
+    public void ReturnsTrueWhenVoicemeeterPresent()
+    {
+        var devices = new List<AudioDeviceInfo>
+        {
+            new("id1", "Voicemeeter Input (VB-Audio Voicemeeter VAIO)", "VB-Audio", false),
+        };
+
+        Assert.True(VirtualAudioDetector.ContainsVirtualAudioDevice(devices));
+    }
+
+    [Fact]
+    public void ReturnsFalseWhenOnlyPhysicalDevicesPresent()
+    {
+        var devices = new List<AudioDeviceInfo>
+        {
+            new("id1", "Speakers (Realtek Audio)", "Realtek Audio", true),
+            new("id2", "Headphones (USB Audio)", "USB Audio", false),
+        };
+
+        Assert.False(VirtualAudioDetector.ContainsVirtualAudioDevice(devices));
+    }
+
+    [Fact]
+    public void ReturnsFalseForEmptyList()
+    {
+        Assert.False(VirtualAudioDetector.ContainsVirtualAudioDevice([]));
+    }
+
+    [Fact]
+    public void MatchesCaseInsensitively()
+    {
+        var devices = new List<AudioDeviceInfo>
+        {
+            new("id1", "Some virtual Audio Device", "Test", false),
+        };
+
+        Assert.True(VirtualAudioDetector.ContainsVirtualAudioDevice(devices));
+    }
+}
+
+public sealed class LauncherSettingsStoreDeviceTests
+{
+    [Fact]
+    public async Task PersistsAndLoadsDeviceId()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var store = new LauncherSettingsStore(Path.Combine(root, "settings.json"));
+        var expected = new LaunchConfiguration(
+            "192.168.1.20",
+            50000,
+            CaptureSource.Wasapi,
+            WasapiRoleOption.Auto,
+            null,
+            "{0.0.0.00000000}.{test-device-guid}");
+
+        try
+        {
+            await store.SaveAsync(expected);
+            var loaded = await store.LoadAsync();
+            Assert.Equal(expected.DeviceId, loaded.DeviceId);
+            Assert.Equal(expected, loaded);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadsLegacySettingsWithoutDeviceIdAsNull()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var settingsPath = Path.Combine(root, "settings.json");
+        await File.WriteAllTextAsync(settingsPath,
+            """{"Host":"10.0.0.1","Port":50000,"Source":"Wasapi","WasapiRole":"Multimedia","Seconds":null}""");
+        var store = new LauncherSettingsStore(settingsPath);
+
+        try
+        {
+            var loaded = await store.LoadAsync();
+            Assert.Null(loaded.DeviceId);
+            Assert.Equal("10.0.0.1", loaded.Host);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}

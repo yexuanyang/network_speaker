@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text;
 using System.Windows;
 using NetworkSpeaker.Launcher.Core;
@@ -9,6 +10,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly StringBuilder logBuilder = new();
     private readonly HostdProcessController processController;
     private readonly LauncherSettingsStore settingsStore;
+    private readonly IDeviceEnumerator? deviceEnumerator;
     private readonly string baseDirectory;
 
     private string host = string.Empty;
@@ -21,15 +23,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string hostdPath = string.Empty;
     private string commandPreview = "hostd.exe not found";
     private bool isRunning;
+    private AudioDeviceInfo? selectedDevice;
+    private bool hasVirtualAudioDevice;
+    private bool isDeviceListLoading;
+    private string? savedDeviceId;
 
-    public MainViewModel(HostdProcessController processController, LauncherSettingsStore settingsStore, string baseDirectory)
+    public MainViewModel(HostdProcessController processController, LauncherSettingsStore settingsStore, string baseDirectory, IDeviceEnumerator? deviceEnumerator = null)
     {
         this.processController = processController;
         this.settingsStore = settingsStore;
         this.baseDirectory = baseDirectory;
+        this.deviceEnumerator = deviceEnumerator;
 
         AvailableSources = Enum.GetValues<CaptureSource>();
         AvailableWasapiRoles = Enum.GetValues<WasapiRoleOption>();
+        AvailableDevices = [AudioDeviceInfo.DefaultSentinel];
+        selectedDevice = AudioDeviceInfo.DefaultSentinel;
 
         this.processController.StateChanged += OnStateChanged;
         this.processController.LogReceived += OnLogReceived;
@@ -38,6 +47,40 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public IEnumerable<CaptureSource> AvailableSources { get; }
 
     public IEnumerable<WasapiRoleOption> AvailableWasapiRoles { get; }
+
+    public ObservableCollection<AudioDeviceInfo> AvailableDevices { get; }
+
+    public AudioDeviceInfo? SelectedDevice
+    {
+        get => selectedDevice;
+        set
+        {
+            if (SetProperty(ref selectedDevice, value))
+            {
+                UpdateCommandPreview();
+            }
+        }
+    }
+
+    public bool HasVirtualAudioDevice
+    {
+        get => hasVirtualAudioDevice;
+        private set => SetProperty(ref hasVirtualAudioDevice, value);
+    }
+
+    public bool IsDeviceListLoading
+    {
+        get => isDeviceListLoading;
+        private set
+        {
+            if (SetProperty(ref isDeviceListLoading, value))
+            {
+                RaisePropertyChanged(nameof(IsDeviceComboBoxEnabled));
+            }
+        }
+    }
+
+    public bool IsDeviceComboBoxEnabled => SelectedSource == CaptureSource.Wasapi && !IsDeviceListLoading;
 
     public string Host
     {
@@ -71,6 +114,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (SetProperty(ref selectedSource, value))
             {
                 RaisePropertyChanged(nameof(IsWasapiRoleEnabled));
+                RaisePropertyChanged(nameof(IsDeviceComboBoxEnabled));
                 UpdateCommandPreview();
             }
         }
@@ -153,9 +197,72 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SelectedSource = configuration.Source;
         SelectedWasapiRole = configuration.WasapiRole;
         Seconds = configuration.Seconds?.ToString() ?? string.Empty;
+        savedDeviceId = configuration.DeviceId;
         StatusText = string.IsNullOrWhiteSpace(HostdPath)
             ? "hostd.exe not found. Build or install the bundled launcher."
             : "Ready";
+
+        await RefreshDeviceListAsync(cancellationToken);
+        UpdateCommandPreview();
+    }
+
+    public async Task RefreshDeviceListAsync(CancellationToken cancellationToken = default)
+    {
+        if (deviceEnumerator == null || string.IsNullOrWhiteSpace(HostdPath))
+        {
+            return;
+        }
+
+        IsDeviceListLoading = true;
+        try
+        {
+            var devices = await deviceEnumerator.EnumerateDevicesAsync(cancellationToken);
+
+            var previousDeviceId = SelectedDevice?.Id;
+            if (string.IsNullOrEmpty(previousDeviceId))
+            {
+                previousDeviceId = savedDeviceId;
+            }
+
+            AvailableDevices.Clear();
+
+            var defaultDevice = devices.FirstOrDefault(d => d.IsDefault);
+            var sentinelName = defaultDevice != null
+                ? $"(Default Device \u2014 {defaultDevice.Name})"
+                : "(Default Device)";
+            var sentinel = AudioDeviceInfo.DefaultSentinel with { Name = sentinelName };
+            AvailableDevices.Add(sentinel);
+
+            foreach (var device in devices)
+            {
+                AvailableDevices.Add(device);
+            }
+
+            HasVirtualAudioDevice = VirtualAudioDetector.ContainsVirtualAudioDevice(devices);
+
+            if (!string.IsNullOrEmpty(previousDeviceId))
+            {
+                var match = AvailableDevices.FirstOrDefault(d => d.Id == previousDeviceId);
+                if (match != null)
+                {
+                    SelectedDevice = match;
+                }
+                else
+                {
+                    SelectedDevice = sentinel;
+                    AppendLogLine($"Previously selected audio device is no longer available. Reverting to system default.", isError: false);
+                }
+            }
+            else
+            {
+                SelectedDevice = sentinel;
+            }
+        }
+        finally
+        {
+            IsDeviceListLoading = false;
+        }
+
         UpdateCommandPreview();
     }
 
@@ -250,12 +357,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             parsedSeconds = secondsValue;
         }
 
+        var deviceId = SelectedDevice != null && !string.IsNullOrEmpty(SelectedDevice.Id)
+            ? SelectedDevice.Id
+            : null;
+
         configuration = new LaunchConfiguration(
             Host.Trim(),
             parsedPort,
             SelectedSource,
             SelectedWasapiRole,
-            parsedSeconds);
+            parsedSeconds,
+            deviceId);
 
         var validation = LaunchConfigurationValidator.Validate(configuration);
         errorMessage = validation.ErrorMessage;

@@ -8,6 +8,7 @@
 
 #include "nspeaker/codec/opus_codec.h"
 #include "nspeaker/server/capture_factory.h"
+#include "nspeaker/server/platform/windows/wasapi_device_enumerator.h"
 #include "nspeaker/server/udp_audio_sender.h"
 
 namespace {
@@ -21,7 +22,63 @@ void OnSignal(int /*signal*/) {
 void PrintUsage() {
     std::cerr << "Usage: hostd --host <ip> --port <port> [--source sine|pulse|wasapi]"
               << " [--pulse-source <name>] [--wasapi-role auto|multimedia|console|communications]"
-              << " [--seconds <n>]\n";
+              << " [--device <endpoint-id>] [--seconds <n>]\n"
+              << "       hostd --list-devices\n";
+}
+
+std::string EscapeJsonString(const std::string& input) {
+    std::string result;
+    result.reserve(input.size());
+    for (const char ch : input) {
+        switch (ch) {
+        case '"':
+            result += "\\\"";
+            break;
+        case '\\':
+            result += "\\\\";
+            break;
+        case '\b':
+            result += "\\b";
+            break;
+        case '\f':
+            result += "\\f";
+            break;
+        case '\n':
+            result += "\\n";
+            break;
+        case '\r':
+            result += "\\r";
+            break;
+        case '\t':
+            result += "\\t";
+            break;
+        default:
+            if (static_cast<unsigned char>(ch) < 0x20) {
+                char buf[8];
+                std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned int>(static_cast<unsigned char>(ch)));
+                result += buf;
+            } else {
+                result += ch;
+            }
+            break;
+        }
+    }
+    return result;
+}
+
+void PrintDevicesJson(const std::vector<nspeaker::server::AudioDeviceInfo>& devices) {
+    std::cout << '[';
+    for (std::size_t i = 0; i < devices.size(); ++i) {
+        if (i > 0) {
+            std::cout << ',';
+        }
+        std::cout << "{\"id\":\"" << EscapeJsonString(devices[i].id)
+                  << "\",\"name\":\"" << EscapeJsonString(devices[i].name)
+                  << "\",\"description\":\"" << EscapeJsonString(devices[i].description)
+                  << "\",\"default\":" << (devices[i].is_default ? "true" : "false")
+                  << '}';
+    }
+    std::cout << "]\n";
 }
 
 std::uint32_t MakeStreamId() {
@@ -42,6 +99,7 @@ int main(int argc, char** argv) {
     std::uint16_t port = 50000;
     nspeaker::server::CaptureConfig capture_config{};
     std::optional<int> seconds;
+    bool list_devices = false;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -55,6 +113,10 @@ int main(int argc, char** argv) {
             capture_config.pulse_source_name = argv[++i];
         } else if (arg == "--wasapi-role" && i + 1 < argc) {
             capture_config.wasapi_role = argv[++i];
+        } else if (arg == "--device" && i + 1 < argc) {
+            capture_config.wasapi_device_id = argv[++i];
+        } else if (arg == "--list-devices") {
+            list_devices = true;
         } else if (arg == "--seconds" && i + 1 < argc) {
             seconds = std::stoi(argv[++i]);
             if (*seconds <= 0) {
@@ -65,6 +127,12 @@ int main(int argc, char** argv) {
             PrintUsage();
             return EXIT_FAILURE;
         }
+    }
+
+    if (list_devices) {
+        const auto devices = nspeaker::server::EnumerateAudioRenderDevices();
+        PrintDevicesJson(devices);
+        return EXIT_SUCCESS;
     }
 
     std::signal(SIGINT, OnSignal);

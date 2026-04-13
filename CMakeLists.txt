@@ -123,6 +123,7 @@ add_library(host_audio STATIC
     server/hostd/src/sine_wave_capture.cpp
     server/hostd/src/platform/linux/pulse_monitor_capture.cpp
     server/hostd/src/platform/windows/wasapi_loopback_capture.cpp
+    server/hostd/src/platform/windows/wasapi_device_enumerator.cpp
     server/hostd/src/udp_audio_sender.cpp)
 target_include_directories(host_audio PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/server/hostd/include)

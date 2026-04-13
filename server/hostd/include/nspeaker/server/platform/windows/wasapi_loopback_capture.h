@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
 #include "nspeaker/audio/capture.h"
 #include "nspeaker/audio/clock.h"
@@ -18,7 +19,8 @@ class WasapiLoopbackCapture final : public audio::IAudioCapture {
 public:
     explicit WasapiLoopbackCapture(
         std::shared_ptr<audio::Clock> clock = std::make_shared<audio::SteadyClock>(),
-        WasapiLoopbackRole role = WasapiLoopbackRole::kAuto);
+        WasapiLoopbackRole role = WasapiLoopbackRole::kAuto,
+        std::string device_id = {});
     ~WasapiLoopbackCapture() override;
 
     bool Start() override;
