@@ -8,6 +8,7 @@
 .idea/
 .worktrees/
 .clangd
+.qwen/
 
 build/
 build-nocache/
