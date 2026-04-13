@@ -28,6 +28,8 @@ std::unique_ptr<nspeaker::client::ClientSession> g_session;
 
 bool SubmitToJava(const nspeaker::audio::PcmFrame& frame) {
     if (g_vm == nullptr || g_bridge_class == nullptr || g_on_pcm_ready == nullptr) {
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag,
+                            "SubmitToJava: JNI not initialized");
         return false;
     }
 
@@ -35,6 +37,8 @@ bool SubmitToJava(const nspeaker::audio::PcmFrame& frame) {
     bool attached = false;
     if (g_vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
         if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+            __android_log_print(ANDROID_LOG_ERROR, kLogTag,
+                                "SubmitToJava: Failed to attach thread");
             return false;
         }
         attached = true;
@@ -42,6 +46,9 @@ bool SubmitToJava(const nspeaker::audio::PcmFrame& frame) {
 
     auto* array = env->NewFloatArray(static_cast<jsize>(frame.interleaved.size()));
     if (array == nullptr) {
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag,
+                            "SubmitToJava: Failed to allocate FloatArray size=%zu",
+                            frame.interleaved.size());
         if (attached) {
             g_vm->DetachCurrentThread();
         }
@@ -54,6 +61,8 @@ bool SubmitToJava(const nspeaker::audio::PcmFrame& frame) {
                               static_cast<jint>(frame.samples_per_channel));
     const bool ok = !env->ExceptionCheck();
     if (!ok) {
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag,
+                            "SubmitToJava: Java exception occurred");
         env->ExceptionClear();
     }
     env->DeleteLocalRef(array);
@@ -61,6 +70,17 @@ bool SubmitToJava(const nspeaker::audio::PcmFrame& frame) {
     if (attached) {
         g_vm->DetachCurrentThread();
     }
+    
+    if (ok) {
+        static std::atomic<int> submit_count{0};
+        const int count = ++submit_count;
+        if (count == 1 || count % 100 == 0) {
+            __android_log_print(ANDROID_LOG_INFO, kLogTag,
+                                "SubmitToJava: submitted %d frames (total=%d)",
+                                static_cast<int>(frame.samples_per_channel), count);
+        }
+    }
+    
     return ok;
 }
 

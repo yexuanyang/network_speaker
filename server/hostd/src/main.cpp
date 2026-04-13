@@ -104,8 +104,10 @@ int main(int argc, char** argv) {
         std::cout << " until interrupted";
     }
     std::cout << '\n';
+    std::cout.flush();
 
     std::uint32_t sequence = 0;
+    std::uint32_t send_count = 0;
     while (!g_stop_requested &&
            (!total_frames.has_value() || sequence < static_cast<std::uint32_t>(*total_frames))) {
         nspeaker::audio::PcmFrame frame;
@@ -123,6 +125,12 @@ int main(int argc, char** argv) {
         if (!sender.Send(sequence++, frame, encoded)) {
             std::cerr << "UDP send failed\n";
             return EXIT_FAILURE;
+        }
+        
+        ++send_count;
+        if (send_count % 100 == 0) {
+            std::cout << "[hostd] Sent " << send_count << " frames to " << host << ':' << port << '\n';
+            std::cout.flush();
         }
     }
 
