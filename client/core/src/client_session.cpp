@@ -48,7 +48,7 @@ void ClientSession::Run() {
         return;
     }
 
-    PlayerPipeline pipeline(std::move(decoder), sink_, clock_, config_.jitter_target_packets);
+    PlayerPipeline pipeline(std::move(decoder), sink_, clock_, config_.pipeline_config);
     while (running()) {
         if (auto packet = receiver_.PollOne(config_.poll_timeout, config_.allowed_sender_ipv4);
             packet.has_value()) {

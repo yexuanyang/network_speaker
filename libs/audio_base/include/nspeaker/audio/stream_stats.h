@@ -14,7 +14,10 @@ struct StreamStats {
     std::uint32_t duplicates_dropped = 0;
     std::uint32_t late_dropped = 0;
     std::uint32_t current_jitter_ms = 0;
+    std::uint32_t peak_jitter_ms = 0;
     std::uint32_t e2e_latency_ms = 0;
+    std::uint32_t startup_skipped_packets = 0;
+    std::uint32_t jitter_variance_us = 0;
 };
 
 }  // namespace nspeaker::audio

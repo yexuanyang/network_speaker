@@ -1,0 +1,80 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Network Speaker"
+           Manufacturer="network_speaker contributors"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="6F98A8E1-46E3-48D0-82E8-D6A2E4A662CE"
+           InstallerVersion="500"
+           Language="1033"
+           Scope="perMachine">
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="Complete"
+             Title="Network Speaker"
+             Description="Network Speaker Windows launcher and bundled hostd.exe"
+             Level="1">
+      <ComponentGroupRef Id="ApplicationComponents" />
+      <ComponentRef Id="StartMenuShortcutsComponent" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Network Speaker" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Network Speaker" />
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="GuiExecutableComponent" Guid="E9E5B2B8-7E07-4DBD-9B57-C0B12A4B6DD8">
+        <File Id="GuiExecutableFile"
+              Source="$(var.GuiExe)"
+              Name="NetworkSpeaker.exe"
+              KeyPath="yes" />
+      </Component>
+      <Component Id="HostdExecutableComponent" Guid="2B24C6C3-52C2-4BFB-99C6-25EA20A7781D">
+        <File Id="HostdExecutableFile"
+              Source="$(var.HostdExe)"
+              Name="hostd.exe"
+              KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="ApplicationComponents">
+      <ComponentRef Id="GuiExecutableComponent" />
+      <ComponentRef Id="HostdExecutableComponent" />
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="StartMenuShortcutsComponent" Guid="9D2B4093-C711-4D3E-A516-7D4A1E8B3325">
+        <Shortcut Id="ApplicationStartMenuShortcut"
+                  Name="Network Speaker"
+                  Description="Launch Network Speaker"
+                  Target="[INSTALLFOLDER]NetworkSpeaker.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="ApplicationUninstallShortcut"
+                  Name="Uninstall Network Speaker"
+                  Description="Uninstall Network Speaker"
+                  Target="[System64Folder]msiexec.exe"
+                  Arguments="/x [ProductCode]" />
+        <RemoveFolder Id="RemoveApplicationProgramsFolder"
+                      Directory="ApplicationProgramsFolder"
+                      On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\NetworkSpeaker"
+                       Name="StartMenuShortcuts"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

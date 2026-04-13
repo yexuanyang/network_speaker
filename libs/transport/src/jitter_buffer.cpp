@@ -47,8 +47,21 @@ std::optional<std::uint32_t> JitterBuffer::OldestSequence() const {
     return packets_.begin()->first;
 }
 
+std::optional<std::uint32_t> JitterBuffer::NewestSequence() const {
+    if (packets_.empty()) {
+        return std::nullopt;
+    }
+    return packets_.rbegin()->first;
+}
+
 void JitterBuffer::Reset() {
     packets_.clear();
+}
+
+void JitterBuffer::DiscardBefore(std::uint32_t min_sequence) {
+    while (!packets_.empty() && packets_.begin()->first < min_sequence) {
+        packets_.erase(packets_.begin());
+    }
 }
 
 std::size_t JitterBuffer::Size() const noexcept {

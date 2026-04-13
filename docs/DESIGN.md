@@ -1,51 +1,52 @@
 # DESIGN
 
-本文档说明 `network_speaker` 当前的整体架构、数据流、关键协议设计与稳定性策略。
+本文档说明 `network_speaker` 当前的系统架构，以及新增的 Windows GUI / MSI / Release 设计。
 
-## 目标
+## 系统目标
 
-项目目标是把桌面端当前播放的音频以尽可能低的延迟转发到 Android 设备，让 Android 设备充当网络扬声器。
+项目目标是把桌面端当前播放的音频以尽可能低的延迟转发到 Android 设备，让 Android 设备作为网络扬声器。
 
-当前主目标路径是：
+当前主路径是：
 
 - Windows 发送端
 - Android 接收端
 - 局域网 UDP 传输
 - Opus 低延迟编码
 
-## 高层架构
+## 高层模块
 
-系统可以分成三层：
+系统当前分成四层：
 
-1. 采集与播放平台层
-2. 音频编解码与传输层
+1. 音频采集与播放平台层
+2. 编解码与传输层
 3. 终端应用层
+4. Windows 分发层
 
-对应模块如下：
+对应模块：
 
 - `server/hostd`
-  - 负责采集音频、编码、发包
+  - 音频采集、编码、发包
 - `client/core`
-  - 负责收包、抖动缓冲、解码、播放回调
+  - 收包、抖动缓冲、解码、播放回调
 - `client/android-app`
-  - 负责 Android 生命周期、前台服务、`AudioTrack`
-- `libs/transport`
-  - 负责 UDP 包格式、socket、jitter buffer
-- `libs/codec_opus`
-  - 负责 Opus 编解码封装
-- `libs/audio_base`
-  - 负责公共 PCM 类型、时钟和统计结构
+  - Android 生命周期、前台服务、`AudioTrack`
+- `apps/windows-launcher`
+  - Windows 图形界面、配置持久化、`hostd.exe` 子进程托管
+- `installer/windows`
+  - MSI 安装器
+- `.github/workflows/release.yml`
+  - GitHub Release 自动化
 
-## 发送端数据流
+## 发送端主链路
 
-发送端主路径：
+发送端数据流：
 
 1. 平台采集模块生成 `PcmFrame`
 2. `OpusEncoder` 编码为 Opus payload
 3. `UdpAudioSender` 组装 `AudioPacket`
 4. 通过 UDP 发往目标地址
 
-当前采集源包括：
+当前采集源：
 
 - `sine`
   - 直接生成测试蜂鸣声
@@ -54,192 +55,182 @@
 - `wasapi`
   - Windows 默认渲染设备 `WASAPI loopback`
 
-## 接收端数据流
+## 接收端主链路
 
-接收端主路径：
+接收端数据流：
 
 1. `Receiver` 从 UDP socket 收包
 2. `TryParsePacket()` 解析为 `AudioPacket`
 3. `PlayerPipeline` 推入 `JitterBuffer`
 4. `PlayerPipeline` 在可播放时序下弹出包
-5. `OpusDecoder` 解码回 PCM
-6. 音频 sink 消费 PCM
+5. `OpusDecoder` 解码为 PCM
+6. sink 消费 PCM
 
-在桌面端：
-
-- sink 可以是测试用的内存/回调 sink
-
-在 Android 端：
+Android 端 sink 路径：
 
 - JNI 回调到 Kotlin
-- Kotlin `AudioOutput` 把 PCM 写入 `AudioTrack`
+- Kotlin `AudioOutput` 写入 `AudioTrack`
 
-## 音频格式
+## 协议关键字段
 
-内部统一 PCM 格式：
+`AudioPacketHeader` 当前关键字段：
 
-- `48 kHz`
-- `2 channels`
-- `float32`
-- 默认帧长 `10 ms`
-
-统一格式的目的：
-
-- 降低平台差异
-- 简化 Opus 编解码输入输出
-- 简化 Android `AudioTrack` 播放路径
-
-## 包格式设计
-
-`AudioPacketHeader` 当前字段包括：
-
-- `magic`
-- `version`
-- `flags`
 - `stream_id`
 - `sequence`
 - `capture_ts_us`
 - `frame_samples`
-- `payload_size`
 
-其中最关键的两个字段是：
+语义：
 
 - `stream_id`
-  - 标识一轮发送会话
-  - 发送端每次 `hostd` 启动都会生成新的 `stream_id`
+  - 标识一次发送会话
+  - `hostd` 每次启动生成新的 `stream_id`
 - `sequence`
-  - 同一条流内严格递增的包序列号
+  - 同一条流内单调递增
 
-## `stream_id` 与 `sequence` 的语义
+这样可以区分：
 
-这两个字段是为了区分两类问题：
+- 发送端重启后的新流
+- 同一条流中的普通丢包或乱序
 
-### 发送端重启
+## 丢包恢复设计
 
-如果 `hostd` 重启，`sequence` 通常会重新从较小值开始。此时客户端不能继续沿用上一轮流的 `expected_sequence`。
+真机比模拟器更容易暴露网络抖动问题，因此接收侧现在采用两段式恢复：
 
-当前策略：
+1. 新 `stream_id` 到达时，重置播放流水线
+2. 同一流中如果缺失某个 `expected_sequence`，但缓冲区已经积累了更高序列号且重新达到目标深度，则跳过缺失包并继续播放
 
-- 如果收到了新的 `stream_id`
-- 则 `PlayerPipeline` 认为这是新的发送会话
-- 重置：
-  - `JitterBuffer`
-  - Opus 解码器状态
-  - `expected_sequence`
+当前接收侧恢复点位于：
 
-### 同一条流中的偶发丢包
+- `client/core/src/player_pipeline.cpp`
+- `libs/transport/src/jitter_buffer.cpp`
 
-如果只是局域网中的单包丢失，不应该要求用户手动重连。
+目标是避免：
 
-当前策略：
+- 第一次丢包后永久静音
+- 发送端重启后，客户端继续把新流当旧包丢弃
 
-- `JitterBuffer` 负责缓存乱序包
-- 如果 `expected_sequence` 对应的包一直没到
-- 但缓冲中已经积累了更高序列号的数据，且缓冲重新达到目标深度
-- 则播放器会：
-  - 认为缺失包已经丢失
-  - 把缺失数累加到 `packets_lost`
-  - 直接把播放位置跳到当前最老的可用包
+## Windows GUI 架构
 
-这样可以避免“第一次丢包后永久静音”的问题。
+首版 Windows GUI 不是重写发送逻辑，而是现有 `hostd.exe` 的图形前端。
 
-## 抖动缓冲设计
+当前设计固定为：
 
-`JitterBuffer` 当前是一个基于 `std::map` 的按序缓存。
+- `NetworkSpeaker.Launcher`
+  - WPF UI
+- `NetworkSpeaker.Launcher.Core`
+  - 参数模型
+  - 命令行构造
+  - 设置持久化
+  - `hostd.exe` 子进程托管
+- `NetworkSpeaker.Launcher.Core.Tests`
+  - GUI 核心逻辑测试
 
-能力：
+GUI 不通过 native IPC 控制发送端，而是：
 
-- 接收乱序包
-- 拒绝重复包
-- 拒绝过晚包
-- 拒绝超出窗口范围的未来包
+1. 根据表单生成命令行
+2. 启动隐藏的 `hostd.exe`
+3. 读取 stdout/stderr
+4. 监控退出码
+5. 用户点击 `Stop` 时终止整个进程树
 
-当前窗口参数：
+这样做的原因：
 
-- `target_packets`
-  - 目标预缓冲深度
-- `max_window`
-  - 最大可接受乱序窗口
+- 不需要重构现有 `hostd` 主程序
+- GUI 和 CLI 可以共享同一套发送逻辑
+- 出问题时容易回退到命令行验证
 
-局限：
+## GUI 参数边界
 
-- 还没有自适应 jitter target
-- 还没有 FEC
-- 还没有时间驱动的 PLC 或补帧策略
+GUI 首版只暴露 Windows 常用参数：
 
-## Android 端设计
+- `host`
+- `port`
+- `source`
+  - `wasapi`
+  - `sine`
+- `wasapi-role`
+- `seconds`
 
-Android 端分成两层：
+明确不在 GUI 中暴露：
 
-- `SpeakerService`
-  - 前台服务
-  - 控制 native 接收端启动/停止
-  - 发布状态广播
-- `AudioOutput`
-  - 封装 `AudioTrack`
-  - 在收到 PCM 时阻塞写入
+- Linux `pulse` 相关参数
+- 其他实验性参数
 
-JNI 桥负责：
+## 配置持久化
 
-- 启动 `ClientSession`
-- 把 native PCM 回调交给 Kotlin
-- 在 native 启动失败时把失败状态返回上层
+GUI 配置持久化到：
 
-## Windows 端设计
+- `%AppData%\NetworkSpeaker\settings.json`
 
-Windows 端的关键点是 `WASAPI loopback`。
+持久化内容：
 
-当前支持：
+- `host`
+- `port`
+- `source`
+- `wasapi-role`
+- `seconds`
 
-- `console`
-- `multimedia`
-- `communications`
-- `auto`
+`hostd.exe` 路径不持久化，运行时动态发现：
 
-其中：
+- 优先同目录 `hostd.exe`
+- 开发环境下再回退到仓库常见构建目录
 
-- 浏览器视频通常更适合 `multimedia`
-- `auto` 当前会优先尝试：
-  - `multimedia`
-  - `console`
-  - `communications`
+## MSI 分发设计
 
-## 当前为什么模拟器更稳定、真机更容易暴露问题
+MSI 安装包固定包含：
 
-模拟器链路通常是：
+- GUI 主程序 `NetworkSpeaker.exe`
+- 同目录 `hostd.exe`
+- Start Menu 快捷方式
+- 卸载入口
 
-- Windows 本机
-- `adb emu redir`
-- 本机回环式网络路径
+首版不做：
 
-这个路径的 UDP 丢包概率很低。
+- 系统托盘
+- 桌面快捷方式
+- 开机自启
+- Windows Service
+- 代码签名
 
-真机链路通常是：
+## Release 自动化设计
 
-- Windows 主机
-- Wi-Fi 局域网
-- Android 真机
+GitHub Actions Release 流程固定为：
 
-这个路径上更容易出现：
+1. `push` tag `v*`
+2. setup-dotnet 10
+3. 初始化 MSVC 工具链
+4. 构建 `hostd.exe`
+5. 运行 GUI 核心测试
+6. `dotnet publish` GUI
+7. 生成 MSI
+8. 生成 SHA256
+9. 上传到 GitHub Release
 
-- 短时丢包
-- 乱序
-- Wi-Fi 抖动
-- 省电/后台调度影响
+`workflow_dispatch` 只做 dry run：
 
-因此接收端的丢包恢复策略在真机上更关键。
+- 构建
+- 打包
+- 上传 artifact
+- 不创建正式 Release
 
-## 当前已知边界
+## 当前边界
 
-- 还没有握手控制信道
-- 还没有加密
-- 还没有 FEC
-- 还没有多声道
-- Android 端保活策略仍有待继续加强
+当前不覆盖：
+
+- Linux/macOS GUI
+- 自动发现与配对
+- 握手控制信道
+- 加密
+- FEC
+- 多声道
+- 更强的 Android 后台保活
+- 代码签名和 SmartScreen 体验优化
 
 ## 相关文档
 
 - 用户说明：[../README.md](../README.md)
-- 开发参与：[CONTRIBUTE.md](CONTRIBUTE.md)
+- 开发说明：[CONTRIBUTE.md](CONTRIBUTE.md)
+- 实施计划：[../plan-1.md](../plan-1.md)
 - 阶段进展：[../progress.md](../progress.md)
 - 调试记录：[../debug.md](../debug.md)
