@@ -6,12 +6,17 @@
         mc:Ignorable="d"
         Title="Network Speaker"
         Width="900"
-        Height="720"
+        Height="780"
         MinWidth="820"
-        MinHeight="640"
-        Loaded="Window_OnLoaded">
+        MinHeight="700"
+        Loaded="Window_OnLoaded"
+        StateChanged="Window_OnStateChanged">
+  <Window.Resources>
+    <BooleanToVisibilityConverter x:Key="BoolToVis" />
+  </Window.Resources>
   <Grid Margin="20">
     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
@@ -127,7 +132,78 @@
       </Border>
     </Grid>
 
+    <!-- Audio Device Selection -->
     <Border Grid.Row="2"
+            Padding="16"
+            Margin="0,0,0,16"
+            BorderBrush="#D0D7DE"
+            BorderThickness="1"
+            CornerRadius="8">
+      <StackPanel>
+        <TextBlock FontWeight="SemiBold"
+                   Text="Audio Device" />
+
+        <Grid Margin="0,12,0,0">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <ComboBox Grid.Column="0"
+                    IsEnabled="{Binding IsDeviceComboBoxEnabled}"
+                    ItemsSource="{Binding AvailableDevices}"
+                    SelectedItem="{Binding SelectedDevice}"
+                    DisplayMemberPath="Name" />
+          <Button Grid.Column="1"
+                  Margin="8,0,0,0"
+                  Padding="12,4"
+                  Content="Refresh"
+                  Click="RefreshDevicesButton_OnClick"
+                  IsEnabled="{Binding IsDeviceComboBoxEnabled}" />
+        </Grid>
+
+        <!-- Virtual audio cable detected -->
+        <StackPanel Margin="0,10,0,0"
+                    Orientation="Horizontal"
+                    Visibility="{Binding HasVirtualAudioDevice, Converter={StaticResource BoolToVis}}">
+          <Ellipse Width="10"
+                   Height="10"
+                   Fill="#22C55E"
+                   VerticalAlignment="Center"
+                   Margin="0,0,6,0" />
+          <TextBlock Foreground="#15803D"
+                     VerticalAlignment="Center"
+                     Text="Virtual audio cable detected. App-specific audio routing is available." />
+        </StackPanel>
+
+        <!-- No virtual audio cable -->
+        <StackPanel Margin="0,10,0,0"
+                    Orientation="Horizontal">
+          <StackPanel.Style>
+            <Style TargetType="StackPanel">
+              <Setter Property="Visibility" Value="Visible" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding HasVirtualAudioDevice}" Value="True">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </StackPanel.Style>
+          <Ellipse Width="10"
+                   Height="10"
+                   Fill="#EAB308"
+                   VerticalAlignment="Center"
+                   Margin="0,0,6,0" />
+          <TextBlock VerticalAlignment="Center"
+                     Foreground="#854D0E">
+            <Run Text="No virtual audio cable detected. Install " />
+            <Hyperlink Click="VbCableLink_OnClick">VB-CABLE (free)</Hyperlink>
+            <Run Text=" for app-specific audio routing. After installing, click Refresh." />
+          </TextBlock>
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="3"
             Padding="16"
             Margin="0,0,0,16"
             BorderBrush="#D0D7DE"
@@ -189,7 +265,7 @@
       </Grid>
     </Border>
 
-    <Border Grid.Row="3"
+    <Border Grid.Row="4"
             Padding="16"
             Margin="0,0,0,16"
             BorderBrush="#D0D7DE"
@@ -216,7 +292,7 @@
       </Grid>
     </Border>
 
-    <Border Grid.Row="4"
+    <Border Grid.Row="5"
             Padding="12"
             Background="#F6F8FA"
             BorderBrush="#D0D7DE"
