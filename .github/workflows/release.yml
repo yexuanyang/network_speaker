@@ -96,3 +96,50 @@ jobs:
           files: |
             artifacts/release/*.msi
             artifacts/release/*.sha256.txt
+            ${{ github.workspace }}/client/android-app/app/build/outputs/apk/release/*.apk
+
+  build-android-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          sdkmanager --install "ndk;27.1.12297006"
+
+      - name: Build release APK
+        working-directory: client/android-app
+        run: |
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Rename APK with version
+        run: |
+          VERSION="${{ github.event_name == 'push' && github.ref_name || inputs.version }}"
+          cp client/android-app/app/build/outputs/apk/release/app-release.apk \
+             "NetworkSpeaker-${VERSION}-android-arm64.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: NetworkSpeaker-*-android-arm64.apk
+
+      - name: Attach APK to release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          files: NetworkSpeaker-*-android-arm64.apk
