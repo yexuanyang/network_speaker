@@ -116,19 +116,35 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install NDK
+      - name: Install NDK and CMake
         run: |
-          sdkmanager --install "ndk;27.1.12297006"
+          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Grant execute permission for gradlew
+        working-directory: client/android-app
+        run: chmod +x gradlew
 
       - name: Build release APK
         working-directory: client/android-app
         run: |
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Find APK
+        id: find_apk
+        run: |
+          APK_PATH=$(find . -name "*.apk" -path "*/release/*" | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "No APK found!"
+            find . -name "*.apk" 2>/dev/null || echo "No APK files found"
+            exit 1
+          fi
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found APK at: $APK_PATH"
 
       - name: Rename APK with version
         run: |
           VERSION="${{ github.event_name == 'push' && github.ref_name || inputs.version }}"
-          cp client/android-app/app/build/outputs/apk/release/app-release.apk \
+          cp "${{ steps.find_apk.outputs.apk_path }}" \
              "NetworkSpeaker-${VERSION}-android-arm64.apk"
 
       - name: Upload APK artifact
