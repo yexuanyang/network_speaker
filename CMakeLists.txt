@@ -59,12 +59,24 @@ if(BUILD_TESTING)
     endif()
     if(NOT NSPEAKER_GTEST_TARGET)
         include(FetchContent)
+
+        set(_nspeaker_git_proxy_args "")
+        if(DEFINED ENV{https_proxy})
+            list(APPEND _nspeaker_git_proxy_args "https.proxy=$ENV{https_proxy}")
+        elseif(DEFINED ENV{HTTPS_PROXY})
+            list(APPEND _nspeaker_git_proxy_args "https.proxy=$ENV{HTTPS_PROXY}")
+        endif()
+        if(DEFINED ENV{http_proxy})
+            list(APPEND _nspeaker_git_proxy_args "http.proxy=$ENV{http_proxy}")
+        elseif(DEFINED ENV{HTTP_PROXY})
+            list(APPEND _nspeaker_git_proxy_args "http.proxy=$ENV{HTTP_PROXY}")
+        endif()
+
         FetchContent_Declare(
             googletest
             GIT_REPOSITORY https://github.com/google/googletest.git
             GIT_TAG        v1.14.0
-            GIT_CONFIG     "http.proxy=http://127.0.0.1:7897"
-                           "https.proxy=http://127.0.0.1:7897"
+            GIT_CONFIG     ${_nspeaker_git_proxy_args}
         )
         set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
         set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
