@@ -647,8 +647,20 @@
     - `Decoded frames=600 samples=288000 latency_ms=12`
   - 这说明“客户端只接收第一轮、后续重启后无声”的桌面侧核心问题已修复
 - 说明：
-  - Android 客户端仍需用户基于本轮代码重新构建并安装新版 APK，
-    再在真机上复测多轮启停场景
+  - Android 客户端最新版 APK 已由用户基于本轮代码完成构建、安装并做真机多轮启停回归
+  - 相关初步结果见下一个验证项
+
+### 23. Android 真机新版 APK 多轮启停回归验证
+
+- 已执行：
+  - 用户在 Android 真机上安装基于当前修复构建的最新版 APK
+  - 在保持 Android 客户端持续 `Listening on ...` 的情况下，
+    多次启动 / 停止 `hostd --source wasapi --wasapi-role multimedia`
+  - 结合浏览器持续播放场景做实际听感回归
+- 结果：
+  - 初步确认多轮启停后 Android 真机端仍可继续恢复接收并正常出声
+  - 当前未观察到此前“第一轮正常、后续重启后无声”的明显回归问题
+  - 这说明截至 `2026-04-12`，多次启停 `hostd` 的接收稳定性修复已经在 Android 真机场景得到初步确认
 
 ## 当前遗留项
 
@@ -684,21 +696,19 @@
   - Windows 主机 `hostd --source sine` -> Android 真机扬声器播放链路
   - Windows 主机 `hostd --source wasapi` -> Android 真机扬声器播放链路
   - Windows 浏览器视频 -> `hostd --source wasapi --wasapi-role multimedia` -> Android 真机扬声器播放链路
+  - Android 真机安装最新版客户端后，多轮启停 `hostd --source wasapi --wasapi-role multimedia` 的初步回归验证
   - Android APK 构建
   - 桌面端 `hostd` 到 Android 模拟器的 UDP 发包链路
   - 宿主机静音状态下，`PulseAudio` monitor source 到 Android 模拟器播放链路
   - 宿主机 HDMI 输出 -> `hostd` -> Android 模拟器 -> 宿主机内置声卡回放链路
 - 仍未完成：
-  - Android 真机安装新版客户端后的多轮 `hostd` 启停回归验证
   - 局域网延迟指标验证
   - 长时间稳定性验证
   - 宿主机环境下 `hostd` 默认无限持续发送的长时间实机运行记录
 
 ## 下一步建议
 
-- 先基于本轮修复重新构建并安装 Android 客户端，
-  在真机上重复“浏览器持续播放 + 多次启停 `hostd --source wasapi --wasapi-role multimedia`”场景
-- 在真机上验证前台通知、后台驻留与熄屏播放行为
+- 在真机上继续扩大回归覆盖，验证前台通知、后台驻留、熄屏播放，以及更长时长的多轮启停场景
 - 在真实局域网环境中联调：
   - `hostd`
   - Android APK

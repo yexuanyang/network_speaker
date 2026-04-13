@@ -1,0 +1,14 @@
+<Project Sdk="WixToolset.Sdk/4.0.6">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\windows-launcher\publish</PublishDir>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">0.1.0</ProductVersion>
+    <DisplayVersion Condition="'$(DisplayVersion)' == ''">$(ProductVersion)</DisplayVersion>
+    <PackageBaseName Condition="'$(PackageBaseName)' == ''">NetworkSpeaker-$(DisplayVersion)-win-x64</PackageBaseName>
+    <InstallerOutputDir Condition="'$(InstallerOutputDir)' == ''">$(MSBuildThisFileDirectory)bin\$(Configuration)\</InstallerOutputDir>
+    <OutputName>$(PackageBaseName)</OutputName>
+    <OutputPath>$(InstallerOutputDir)</OutputPath>
+    <DefineConstants>ProductVersion=$(ProductVersion);DisplayVersion=$(DisplayVersion);GuiExe=$(PublishDir)\NetworkSpeaker.exe;HostdExe=$(PublishDir)\hostd.exe</DefineConstants>
+  </PropertyGroup>
+</Project>
