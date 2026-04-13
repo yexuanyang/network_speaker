@@ -1,6 +1,6 @@
 # CONTRIBUTE
 
-本文档面向开发者，说明如何在本仓库中继续开发、验证和提交改动。
+本文档面向开发者，说明如何继续开发 `network_speaker`，尤其是 Windows GUI、MSI 打包和 GitHub Release 流程。
 
 ## 仓库结构
 
@@ -9,56 +9,66 @@
 - `libs/transport`
   - 音频包格式、UDP socket、抖动缓冲
 - `libs/codec_opus`
-  - Opus 编码器/解码器封装
+  - Opus 编解码封装
 - `server/hostd`
-  - 桌面发送端 CLI
+  - 命令行发送端
 - `client/core`
-  - 接收端公共核心逻辑
+  - 接收端核心流水线
 - `client/android-app`
   - Android 应用壳与 JNI 桥接
-- `tests`
-  - C++ 单测与协议级回归测试
+- `apps/windows-launcher`
+  - Windows GUI 与其测试
+- `installer/windows`
+  - WiX v4 MSI 工程
 - `tools`
-  - 辅助脚本
+  - 打包脚本与辅助脚本
+- `.github/workflows`
+  - Release 自动化
 
-## 开发前提
+## 本地开发前提
 
-### Windows
+### C++ 发送端
 
-建议使用 Visual Studio Developer PowerShell，或者先执行 `vcvars64.bat` 再进入仓库目录。
-
-典型构建命令：
-
-```powershell
-cmake -S . -B build-windows -G "NMake Makefiles" -DBUILD_TESTING=OFF
-cmake --build build-windows
-```
-
-如果需要测试：
+需要 Visual Studio Developer PowerShell（或已激活 `vcvars64.bat`），以及设置好 `VCPKG_ROOT` 环境变量。
 
 ```powershell
-cmake -S . -B build-windows-verify -G "NMake Makefiles" -DBUILD_TESTING=ON
-cmake --build build-windows-verify
+$env:VCPKG_ROOT = "D:\tools\vcpkg"   # 按实际路径修改
+cmake --preset windows-ninja-vcpkg
+cmake --build --preset windows-ninja-vcpkg
+ctest --preset windows-ninja-vcpkg
 ```
 
-说明：
+产物位于 `out/build/windows-ninja-vcpkg/`。
 
-- Windows 下默认使用仓库内 vendored 的 `third_party/opus`
-- 如果本机没有可用的 GoogleTest，配置阶段会跳过 `network_speaker_tests`
+### Windows GUI
 
-### Linux
+Windows GUI 使用 `.NET 10 WPF`。
 
-```bash
-cmake -S . -B build
-cmake --build build -j4
-ctest --test-dir build --output-on-failure
+项目：
+
+- `apps/windows-launcher/NetworkSpeaker.Launcher`
+- `apps/windows-launcher/NetworkSpeaker.Launcher.Core`
+- `apps/windows-launcher/NetworkSpeaker.Launcher.Core.Tests`
+
+本地需要：
+
+- .NET 10 SDK
+- 仓库根目录的 `global.json` 会把 SDK 锁定到当前 `.NET 10` feature band
+- Visual Studio Community 2026 或带 C++ 工作负载的 Visual Studio Build Tools
+- Visual Studio 相关组件优先通过 Visual Studio Installer 安装
+- NuGet restore 不由 Visual Studio Installer 管理；首次构建/测试时需要由 Visual Studio 或 `dotnet restore`/`dotnet build`/`dotnet test` 完成包还原
+
+构建 GUI：
+
+```powershell
+dotnet build .\apps\windows-launcher\NetworkSpeaker.Launcher\NetworkSpeaker.Launcher.csproj
 ```
 
-Linux 当前主要用于：
+运行 GUI 核心测试：
 
-- C++ 核心功能开发
-- `PulseAudio` 路线验证
-- 常规单元测试与协议级集成测试
+```powershell
+dotnet test .\apps\windows-launcher\NetworkSpeaker.Launcher.Core.Tests\NetworkSpeaker.Launcher.Core.Tests.csproj
+```
 
 ### Android
 
@@ -71,18 +81,88 @@ Linux 当前主要用于：
 - CMake `3.22.1`
 - JDK 17
 
-`client/android-app/local.properties` 需要配置 `sdk.dir=...`，该文件不入库。
+`client/android-app/local.properties` 需要自行配置 `sdk.dir=...`，该文件不入库。
 
-## 建议工作流
+## GUI 实现约定
 
-1. 先明确改动属于哪一层：
-   - 协议
-   - 发送端
-   - 接收端
-   - Android 壳层
-2. 尽量先补或更新最靠近问题的自动化测试
-3. 再做平台联调
-4. 更新相关文档
+首版 GUI 只做 Windows 常用参数：
+
+- `host`
+- `port`
+- `source=wasapi/sine`
+- `wasapi-role`
+- `seconds`
+
+明确不做：
+
+- Linux `pulse` 参数可视化
+- 托盘常驻
+- 开机自启
+- 把 `hostd` 逻辑直接嵌入 GUI 进程
+
+当前实现策略固定为：
+
+- GUI 负责拼接命令行
+- GUI 启动隐藏的 `hostd.exe` 子进程
+- GUI 读取 stdout/stderr 并更新状态
+- 配置持久化到 `%AppData%\NetworkSpeaker\settings.json`
+
+## MSI 打包
+
+MSI 使用 WiX Toolset v4。
+
+安装工程：
+
+- `installer/windows/NetworkSpeaker.Installer.wixproj`
+- `installer/windows/Product.wxs`
+
+本地一键打包脚本：
+
+```powershell
+.\tools\package-windows-installer.ps1
+```
+
+如果需要显式指定发布展示版本：
+
+```powershell
+.\tools\package-windows-installer.ps1 -Version 0.1.0-rc1
+```
+
+脚本会完成：
+
+1. 构建 `hostd.exe`
+2. `dotnet publish` Windows GUI
+3. 调用 WiX 生成 MSI
+4. 产出 SHA256 文件
+
+默认产物位置：
+
+- `artifacts/windows-launcher/publish`
+- `artifacts/release`
+
+## GitHub Release
+
+Release workflow：
+
+- `.github/workflows/release.yml`
+
+触发方式：
+
+- `push` tag：`v*`
+- `workflow_dispatch`：用于 dry run
+
+行为：
+
+- 构建 GUI 测试
+- 构建 `hostd.exe`
+- 发布自包含 GUI
+- 生成 MSI
+- 生成 SHA256
+- tag 场景下自动创建或更新 GitHub Release
+
+Release 说明模板：
+
+- `.github/release-notes-template.md`
 
 ## 测试建议
 
@@ -94,26 +174,33 @@ Linux 当前主要用于：
 - `tests/jitter_buffer_test.cpp`
 - `tests/end_to_end_test.cpp`
 
-其中：
+### GUI 回归
 
-- 包格式变更优先补 `audio_packet_test.cpp`
-- 抖动/丢包逻辑优先补 `jitter_buffer_test.cpp`
-- 流水线行为优先补 `end_to_end_test.cpp`
+优先覆盖：
+
+- 参数到命令行的映射
+- 设置持久化
+- 状态机转换
+- 子进程异常退出
 
 ### Windows 本机验证
 
-最小回环：
+命令行最小回环：
 
 ```powershell
-.\build-windows-verify\clientd.exe --port 50000 --seconds 5
-.\build-windows-verify\hostd.exe --host 127.0.0.1 --port 50000 --source sine --seconds 2
+.\out\build\windows-ninja-vcpkg\clientd.exe --port 50000 --seconds 5
+.\out\build\windows-ninja-vcpkg\hostd.exe --host 127.0.0.1 --port 50000 --source sine --seconds 2
 ```
 
-浏览器/系统音频：
+GUI 最小验证：
 
-```powershell
-.\build-windows-verify\hostd.exe --host <目标IP> --port 50000 --source wasapi --wasapi-role multimedia
-```
+- 启动 `Network Speaker`
+- 选择 `Source=Sine`
+- `Target IP=127.0.0.1`
+- `Port=50000`
+- `Seconds=3`
+- 点击 `Start`
+- 确认日志里出现 `Streaming to ...` 和 `Sent 300 frames ...`
 
 ### Android 模拟器验证
 
@@ -129,37 +216,11 @@ adb emu redir add udp:50000:50000
 127.0.0.1:50000
 ```
 
-不要默认用 `10.0.2.16` 作为 Windows 侧发送目标。
-
-### Android 真机验证
-
-重点观察：
-
-- 前台服务是否持续存活
-- UI 是否仍显示 `Listening on ...`
-- 播放中断后是否需要手动重连
-- 浏览器视频场景下 `--wasapi-role multimedia` 是否更稳定
-
 ## 文档约定
 
-- 面向使用者的说明放在根目录 `README.md`
-- 面向开发者的参与说明放在 `docs/CONTRIBUTE.md`
-- 架构设计放在 `docs/DESIGN.md`
-- 阶段进展记录放在 `progress.md`
-- 单次调试过程记录放在 `debug.md`
-
-当你做了以下类型改动时，建议同步更新文档：
-
-- 用户可见的使用方式变化
-- 协议字段变化
-- 新增平台能力
-- 关键稳定性问题的根因与修复
-
-## 提交建议
-
-- 一个提交尽量只覆盖一个明确主题
-- 提交前至少确认：
-  - 相关目标能编译
-  - 最贴近本次改动的测试或回归验证已经执行
-  - 文档已同步
-- 如果当前工作树里有其他未提交改动，提交前先分清哪些属于本次工作，避免混入无关内容
+- 用户说明：`README.md`
+- 开发说明：`docs/CONTRIBUTE.md`
+- 架构设计：`docs/DESIGN.md`
+- 实施计划：`plan-1.md`
+- 阶段进展：`progress.md`
+- 调试记录：`debug.md`

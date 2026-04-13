@@ -3,14 +3,18 @@
 .gradle-home/
 .gradle-home-windows/
 .gw/
+.vs/
 .home/
 .idea/
+.worktrees/
 
 build/
 build-nocache/
 build-windows*/
 cmake-build-*/
+out/
 compile_commands.json
+artifacts/
 
 client/android-app/.gradle/
 client/android-app/.idea/
@@ -18,6 +22,11 @@ client/android-app/.kotlin/
 client/android-app/app/.cxx/
 client/android-app/app/build/
 client/android-app/local.properties
+
+apps/windows-launcher/**/bin/
+apps/windows-launcher/**/obj/
+installer/windows/bin/
+installer/windows/obj/
 
 *.apk
 clientd-restart-test.out
