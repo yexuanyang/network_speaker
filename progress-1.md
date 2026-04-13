@@ -212,7 +212,6 @@
 1. 创建测试 tag，跑通 `.github/workflows/release.yml`
 2. 从 GitHub Release 下载 MSI，在无开发环境机器上做一次真实安装验证
 3. 评估是否保留 `AllowSameVersionUpgrades="yes"`（若保留，则接受 ICE61 警告）
-4. 补做一次“标准用户权限”安装指引说明，明确 `perMachine` 需要管理员权限
 
 ## 本轮涉及的主要文件
 
