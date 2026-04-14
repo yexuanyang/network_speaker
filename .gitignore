@@ -9,6 +9,7 @@
 .worktrees/
 .clangd
 .qwen/
+.qoder/
 
 build/
 build-nocache/
