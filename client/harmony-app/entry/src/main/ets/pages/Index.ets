@@ -1,6 +1,5 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common, wantAgent } from '@kit.AbilityKit';
-import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { connection } from '@kit.NetworkKit';
 import nativeBridge from 'libentry.so';
 import { ConnectionConfig, DEFAULT_PORT, ValidationError } from '../model/ConnectionConfig';
@@ -16,14 +15,18 @@ struct Index {
   @State senderHost: string = '';
   @State listenPort: string = DEFAULT_PORT.toString();
   @State routeHint: string = '';
-  @State statusText: string = $r('app.string.status_stopped') as unknown as string;
+  @State statusText: string = 'Receiver stopped.';
   @State isRunning: boolean = false;
   @State portError: string = '';
   @State hostError: string = '';
-  private context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
+  private uiAbilityContext: common.UIAbilityContext | undefined = undefined;
 
   aboutToAppear(): void {
-    this.statusText = getContext(this).resourceManager.getStringSync($r('app.string.status_stopped'));
+    try {
+      this.uiAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, 'Failed to get UIAbilityContext: %{public}s', JSON.stringify(err));
+    }
     this.loadSettings();
     this.refreshRouteHint();
   }
@@ -44,7 +47,7 @@ struct Index {
           .margin({ top: 24, bottom: 8 })
 
         // Description
-        Text(getContext(this).resourceManager.getStringSync($r('app.string.connection_summary')))
+        Text($r('app.string.connection_summary'))
           .fontSize(14)
           .fontColor('#666666')
           .margin({ bottom: 24 })
@@ -52,13 +55,13 @@ struct Index {
           .width('100%')
 
         // Sender IPv4 Filter
-        Text(getContext(this).resourceManager.getStringSync($r('app.string.sender_host_label')))
+        Text($r('app.string.sender_host_label'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .width('100%')
           .margin({ bottom: 4 })
 
-        TextInput({ text: this.senderHost, placeholder: getContext(this).resourceManager.getStringSync($r('app.string.sender_host_hint')) })
+        TextInput({ text: this.senderHost, placeholder: 'Optional, for example 192.168.1.10' })
           .type(InputType.Normal)
           .width('100%')
           .onChange((value: string) => {
@@ -76,13 +79,13 @@ struct Index {
         }
 
         // Listen Port
-        Text(getContext(this).resourceManager.getStringSync($r('app.string.listen_port_label')))
+        Text($r('app.string.listen_port_label'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .width('100%')
           .margin({ top: 12, bottom: 4 })
 
-        TextInput({ text: this.listenPort, placeholder: getContext(this).resourceManager.getStringSync($r('app.string.listen_port_hint')) })
+        TextInput({ text: this.listenPort, placeholder: '50000' })
           .type(InputType.Number)
           .width('100%')
           .onChange((value: string) => {
@@ -101,7 +104,7 @@ struct Index {
         }
 
         // Route hint
-        Text(getContext(this).resourceManager.getStringSync($r('app.string.route_hint_label')))
+        Text($r('app.string.route_hint_label'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .width('100%')
@@ -117,7 +120,7 @@ struct Index {
           .margin({ bottom: 16 })
 
         // Status
-        Text(getContext(this).resourceManager.getStringSync($r('app.string.status_label')))
+        Text($r('app.string.status_label'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .width('100%')
@@ -130,7 +133,7 @@ struct Index {
           .margin({ bottom: 24 })
 
         // Start button
-        Button(getContext(this).resourceManager.getStringSync($r('app.string.start_receiver')))
+        Button($r('app.string.start_receiver'))
           .width('100%')
           .height(48)
           .type(ButtonType.Capsule)
@@ -141,7 +144,7 @@ struct Index {
           .margin({ bottom: 12 })
 
         // Stop button
-        Button(getContext(this).resourceManager.getStringSync($r('app.string.stop_receiver')))
+        Button($r('app.string.stop_receiver'))
           .width('100%')
           .height(48)
           .type(ButtonType.Capsule)
@@ -161,7 +164,7 @@ struct Index {
   private startReceiver(): void {
     const portValue = ConnectionConfig.parsePort(this.listenPort);
     if (portValue === undefined) {
-      this.portError = getContext(this).resourceManager.getStringSync($r('app.string.invalid_port'));
+      this.portError = 'Enter a UDP port between 1 and 65535.';
       return;
     }
 
@@ -170,9 +173,9 @@ struct Index {
     if (!result.valid) {
       const invalid = result as InvalidResult;
       if (invalid.error === ValidationError.INVALID_PORT) {
-        this.portError = getContext(this).resourceManager.getStringSync($r('app.string.invalid_port'));
+        this.portError = 'Enter a UDP port between 1 and 65535.';
       } else if (invalid.error === ValidationError.INVALID_SENDER_IPV4) {
-        this.hostError = getContext(this).resourceManager.getStringSync($r('app.string.invalid_sender_ipv4'));
+        this.hostError = 'Enter a valid IPv4 address or leave it blank.';
       }
       return;
     }
@@ -192,7 +195,6 @@ struct Index {
       } else {
         this.statusText = `Listening on UDP ${port} from ${host}.`;
       }
-      this.startBackgroundTask();
       hilog.info(LOG_DOMAIN, LOG_TAG, 'Receiver started on port %{public}d', port);
     } else {
       this.isRunning = false;
@@ -204,8 +206,7 @@ struct Index {
   private stopReceiver(): void {
     nativeBridge.nativeStop();
     this.isRunning = false;
-    this.statusText = getContext(this).resourceManager.getStringSync($r('app.string.status_stopped'));
-    this.stopBackgroundTask();
+    this.statusText = 'Receiver stopped.';
     hilog.info(LOG_DOMAIN, LOG_TAG, 'Receiver stopped');
   }
 
@@ -230,8 +231,11 @@ struct Index {
   }
 
   private async loadSettings(): Promise<void> {
+    if (!this.uiAbilityContext) {
+      return;
+    }
     try {
-      const config = await SettingsManager.loadConfig(this.context);
+      const config = await SettingsManager.loadConfig(this.uiAbilityContext);
       this.senderHost = config.senderHost;
       this.listenPort = config.listenPort.toString();
     } catch (err) {
@@ -240,50 +244,13 @@ struct Index {
   }
 
   private async saveSettings(config: ConnectionConfig): Promise<void> {
+    if (!this.uiAbilityContext) {
+      return;
+    }
     try {
-      await SettingsManager.saveConfig(this.context, config);
+      await SettingsManager.saveConfig(this.uiAbilityContext, config);
     } catch (err) {
       hilog.warn(LOG_DOMAIN, LOG_TAG, 'Failed to save settings: %{public}s', JSON.stringify(err));
-    }
-  }
-
-  private startBackgroundTask(): void {
-    try {
-      const wantAgentInfo: wantAgent.WantAgentInfo = {
-        wants: [
-          {
-            bundleName: this.context.abilityInfo.bundleName,
-            abilityName: this.context.abilityInfo.name,
-          }
-        ],
-        actionType: wantAgent.OperationType.START_ABILITY,
-        requestCode: 0,
-        actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG],
-      };
-      wantAgent.getWantAgent(wantAgentInfo).then((agent) => {
-        backgroundTaskManager.startBackgroundRunning(this.context,
-          backgroundTaskManager.BackgroundMode.AUDIO_PLAYBACK, agent).then(() => {
-          hilog.info(LOG_DOMAIN, LOG_TAG, 'Background task started');
-        }).catch((err: Error) => {
-          hilog.error(LOG_DOMAIN, LOG_TAG, 'Failed to start background task: %{public}s', err.message);
-        });
-      }).catch((err: Error) => {
-        hilog.error(LOG_DOMAIN, LOG_TAG, 'Failed to get want agent: %{public}s', err.message);
-      });
-    } catch (err) {
-      hilog.error(LOG_DOMAIN, LOG_TAG, 'Background task error: %{public}s', JSON.stringify(err));
-    }
-  }
-
-  private stopBackgroundTask(): void {
-    try {
-      backgroundTaskManager.stopBackgroundRunning(this.context).then(() => {
-        hilog.info(LOG_DOMAIN, LOG_TAG, 'Background task stopped');
-      }).catch((err: Error) => {
-        hilog.error(LOG_DOMAIN, LOG_TAG, 'Failed to stop background task: %{public}s', err.message);
-      });
-    } catch (err) {
-      hilog.error(LOG_DOMAIN, LOG_TAG, 'Stop background task error: %{public}s', JSON.stringify(err));
     }
   }
 }

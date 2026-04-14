@@ -8,16 +8,26 @@ const KEY_LISTEN_PORT: string = 'listen_port';
 
 export class SettingsManager {
   static async loadConfig(context: common.UIAbilityContext): Promise<ConnectionConfig> {
-    const store = preferences.getPreferencesSync(context, { name: PREFERENCES_NAME });
-    const host = store.getSync(KEY_SENDER_HOST, '') as string;
-    const port = store.getSync(KEY_LISTEN_PORT, DEFAULT_PORT) as number;
-    return new ConnectionConfig(host, port);
+    try {
+      const store: preferences.Preferences =
+        preferences.getPreferencesSync(context, { name: PREFERENCES_NAME });
+      const host: string = store.getSync(KEY_SENDER_HOST, '') as string;
+      const port: number = store.getSync(KEY_LISTEN_PORT, DEFAULT_PORT) as number;
+      return new ConnectionConfig(host, port);
+    } catch (err) {
+      return new ConnectionConfig('', DEFAULT_PORT);
+    }
   }
 
   static async saveConfig(context: common.UIAbilityContext, config: ConnectionConfig): Promise<void> {
-    const store = preferences.getPreferencesSync(context, { name: PREFERENCES_NAME });
-    store.putSync(KEY_SENDER_HOST, config.senderHost);
-    store.putSync(KEY_LISTEN_PORT, config.listenPort);
-    await store.flush();
+    try {
+      const store: preferences.Preferences =
+        preferences.getPreferencesSync(context, { name: PREFERENCES_NAME });
+      store.putSync(KEY_SENDER_HOST, config.senderHost);
+      store.putSync(KEY_LISTEN_PORT, config.listenPort);
+      await store.flush();
+    } catch (err) {
+      // Silently ignore save failures.
+    }
   }
 }
