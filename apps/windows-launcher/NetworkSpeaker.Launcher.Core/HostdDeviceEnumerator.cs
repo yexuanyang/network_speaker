@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 
 namespace NetworkSpeaker.Launcher.Core;
@@ -33,6 +34,8 @@ public sealed class HostdDeviceEnumerator : IDeviceEnumerator
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
             };
 
             process.Start();

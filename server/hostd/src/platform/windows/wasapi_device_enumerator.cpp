@@ -9,8 +9,9 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <functiondiscoverykeys_devpkey.h>
+#include <wtypes.h>  // DEFINE_PROPERTYKEY, PROPERTYKEY
 #include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
 #include <wrl/client.h>
 
 #include <memory>

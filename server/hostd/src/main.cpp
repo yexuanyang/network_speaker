@@ -6,6 +6,10 @@
 #include <optional>
 #include <string>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include "nspeaker/codec/opus_codec.h"
 #include "nspeaker/server/capture_factory.h"
 #include "nspeaker/server/platform/windows/wasapi_device_enumerator.h"
@@ -67,6 +71,10 @@ std::string EscapeJsonString(const std::string& input) {
 }
 
 void PrintDevicesJson(const std::vector<nspeaker::server::AudioDeviceInfo>& devices) {
+#ifdef _WIN32
+    // Set console output to UTF-8 for proper Unicode support
+    SetConsoleOutputCP(CP_UTF8);
+#endif
     std::cout << '[';
     for (std::size_t i = 0; i < devices.size(); ++i) {
         if (i > 0) {
