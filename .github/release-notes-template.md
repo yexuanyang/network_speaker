@@ -6,7 +6,9 @@
 |----------|------|
 | Windows x64 | `{{PACKAGE_BASENAME}}.msi` |
 | Android arm64 | `NetworkSpeaker-{{VERSION}}-android-arm64.apk` |
-| HarmonyOS arm64 | `NetworkSpeaker-{{VERSION}}-harmonyos-arm64.hap` |
+| Linux x64 (Ubuntu 22.04) | `NetworkSpeaker-{{VERSION}}-linux-amd64-ubuntu2204.tar.gz` |
+| Linux x64 (Ubuntu 24.04) | `NetworkSpeaker-{{VERSION}}-linux-amd64-ubuntu2404.tar.gz` |
+| Linux x64 (RPM) | `NetworkSpeaker-{{VERSION}}-linux-x86_64.rpm` |
 
 Optionally verify Windows checksum: `{{PACKAGE_BASENAME}}.sha256.txt`
 
@@ -22,9 +24,13 @@ Optionally verify Windows checksum: `{{PACKAGE_BASENAME}}.sha256.txt`
 1. Install the APK on an Android device (API 29+)
 2. Open the app and enter the sender IP address and port
 
-### HarmonyOS
-1. Install the HAP via DevEco Studio or `hdc install`
-2. Open the app and enter the sender IP address and port
+### Linux (Ubuntu / Debian)
+1. Download and extract the tarball matching your distribution version
+2. Run `./hostd --host <RECEIVER_IP> --port <PORT> --source pulse`
+
+### Linux (Fedora / RHEL)
+1. Install the RPM: `sudo rpm -i NetworkSpeaker-{{VERSION}}-linux-x86_64.rpm`
+2. Run `hostd --host <RECEIVER_IP> --port <PORT> --source pulse`
 
 ## First use
 
