@@ -13,12 +13,25 @@
           "storeFile": "C:\\Users\\11822\\.ohos\\config\\default_harmony-app_ayHFnNcii2JMoiI24-76Cn8okArc4gk4XahrMekQFV0=.p12",
           "storePassword": "0000001B58832D150639B92FB2B4D5A10FE7111C5A15C11F9D8DA3811CAE97BEFCE8864DF7D99C2F26BBCA"
         }
+      },
+      {
+        "name": "publish",
+        "type": "HarmonyOS",
+        "material": {
+          "storeFile": "C:/Users/11822/openharmony_sign_keys/networkspeaker.p12",
+          "storePassword": "0000001EF73E53E0422FC893CA3E3DBE96754EB0817FCEDB9DB28077B7418747B1C5625F17B30E464CD057A798B2",
+          "keyAlias": "publishKey",
+          "keyPassword": "0000001E722E437DD05F7537B8EA7DC85CF1F2C90A21A96404BE3FF8B915EEB8ACC08A031FFFFA3F2519E37C496A",
+          "signAlg": "SHA256withECDSA",
+          "profile": "C:/Users/11822/openharmony_sign_keys/networkspeakerRelease.p7b",
+          "certpath": "C:/Users/11822/openharmony_sign_keys/networkspeaker_release.cer"
+        }
       }
     ],
     "products": [
       {
         "name": "default",
-        "signingConfig": "default",
+        "signingConfig": "publish",
         "targetSdkVersion": "6.0.2(22)",
         "compatibleSdkVersion": "6.0.2(22)",
         "runtimeOS": "HarmonyOS",
