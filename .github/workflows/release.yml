@@ -160,6 +160,159 @@ jobs:
           name: ${{ github.ref_name }}
           files: NetworkSpeaker-*-android-arm64.apk
 
+  build-harmonyos-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Cache HarmonyOS SDK
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: ~/harmonyos-sdk
+          key: harmonyos-sdk-6.0.2.642
+
+      - name: Download HarmonyOS commandline-tools
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: |
+          SDK_URL="https://image.cdn.dog/commandline-tools-linux-x64-6.0.2.642.zip"
+          SDK_SHA256="181d283be91392e0a5dc09caf5ebda34c778cccc9985d8a97a814808452e2471"
+          wget -q -O /tmp/commandline-tools.zip "$SDK_URL"
+          echo "$SDK_SHA256  /tmp/commandline-tools.zip" | sha256sum -c -
+          mkdir -p ~/harmonyos-sdk
+          unzip -q /tmp/commandline-tools.zip -d ~/harmonyos-sdk/
+          chmod -R +x ~/harmonyos-sdk/command-line-tools/bin
+          rm /tmp/commandline-tools.zip
+
+      - name: Set HarmonyOS environment
+        run: |
+          TOOL_DIR="$HOME/harmonyos-sdk"
+          echo "COMMANDLINE_TOOL_DIR=$TOOL_DIR" >> "$GITHUB_ENV"
+          echo "OHOS_BASE_SDK_HOME=$TOOL_DIR/command-line-tools/sdk/default/openharmony" >> "$GITHUB_ENV"
+          echo "HDC_HOME=$TOOL_DIR/command-line-tools/sdk/default/openharmony/toolchains" >> "$GITHUB_ENV"
+          echo "NODE_HOME=$(dirname "$(which node)")" >> "$GITHUB_ENV"
+          echo "$TOOL_DIR/command-line-tools/bin" >> "$GITHUB_PATH"
+          echo "$TOOL_DIR/command-line-tools/sdk/default/openharmony/toolchains" >> "$GITHUB_PATH"
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          IFS='.' read -r major minor patch <<< "${VERSION%%[-+]*}"
+          major=${major:-0}; minor=${minor:-0}; patch=${patch:-0}
+          VERSION_CODE=$((major * 1000000 + minor * 1000 + patch))
+          echo "display_version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Inject version into app.json5
+        working-directory: client/harmony-app
+        run: |
+          VERSION="${{ steps.version.outputs.display_version }}"
+          VERSION_CODE="${{ steps.version.outputs.version_code }}"
+          sed -i "s/\"versionName\": \".*\"/\"versionName\": \"$VERSION\"/" AppScope/app.json5
+          sed -i "s/\"versionCode\": [0-9]*/\"versionCode\": $VERSION_CODE/" AppScope/app.json5
+
+      - name: Patch build config for CI
+        working-directory: client/harmony-app
+        run: |
+          python3 -c "
+          import re
+          text = open('build-profile.json5').read()
+          text = re.sub(r'\"signingConfigs\":\s*\[.*?\]', '\"signingConfigs\": []', text, flags=re.DOTALL)
+          text = re.sub(r'\"signingConfig\":\s*\"default\",?\s*', '', text)
+          open('build-profile.json5', 'w').write(text)
+          "
+          sed -i 's/"nativeCompiler": "BiSheng"/"nativeCompiler": "default"/' build-profile.json5
+
+      - name: Install OHPM dependencies
+        working-directory: client/harmony-app
+        run: ohpm install --all
+
+      - name: Build HAP
+        working-directory: client/harmony-app
+        run: |
+          hvigorw assembleHap \
+            --mode module \
+            -p product=default \
+            -p buildMode=release \
+            --no-daemon
+
+      - name: Decode signing certificates
+        if: >-
+          secrets.HARMONYOS_SIGNING_P12 != '' &&
+          secrets.HARMONYOS_SIGNING_P7B != '' &&
+          secrets.HARMONYOS_SIGNING_CER != ''
+        run: |
+          mkdir -p "$RUNNER_TEMP/signing"
+          echo "${{ secrets.HARMONYOS_SIGNING_P12 }}" | base64 -d > "$RUNNER_TEMP/signing/keystore.p12"
+          echo "${{ secrets.HARMONYOS_SIGNING_P7B }}" | base64 -d > "$RUNNER_TEMP/signing/profile.p7b"
+          echo "${{ secrets.HARMONYOS_SIGNING_CER }}" | base64 -d > "$RUNNER_TEMP/signing/cert.cer"
+
+      - name: Sign HAP
+        id: sign
+        if: >-
+          secrets.HARMONYOS_SIGNING_P12 != '' &&
+          secrets.HARMONYOS_SIGNING_P7B != '' &&
+          secrets.HARMONYOS_SIGNING_CER != ''
+        working-directory: client/harmony-app
+        run: |
+          HAP_SIGN_TOOL="$HOME/harmonyos-sdk/command-line-tools/sdk/default/openharmony/toolchains/lib/hap-sign-tool.jar"
+          java -jar "$HAP_SIGN_TOOL" sign-app \
+            -keyAlias "${{ secrets.HARMONYOS_KEY_ALIAS }}" \
+            -signAlg "SHA256withECDSA" \
+            -mode "localSign" \
+            -appCertFile "$RUNNER_TEMP/signing/cert.cer" \
+            -profileFile "$RUNNER_TEMP/signing/profile.p7b" \
+            -keystoreFile "$RUNNER_TEMP/signing/keystore.p12" \
+            -keyPwd "${{ secrets.HARMONYOS_KEY_PASSWORD }}" \
+            -keystorePwd "${{ secrets.HARMONYOS_STORE_PASSWORD }}" \
+            -inFile "entry/build/default/outputs/default/entry-default-unsigned.hap" \
+            -outFile "entry/build/default/outputs/default/entry-default-signed.hap" \
+            -signCode "1"
+
+      - name: Rename HAP
+        run: |
+          VERSION="${{ steps.version.outputs.display_version }}"
+          if [ -f client/harmony-app/entry/build/default/outputs/default/entry-default-signed.hap ]; then
+            HAP_SRC="client/harmony-app/entry/build/default/outputs/default/entry-default-signed.hap"
+          else
+            HAP_SRC="client/harmony-app/entry/build/default/outputs/default/entry-default-unsigned.hap"
+          fi
+          cp "$HAP_SRC" "NetworkSpeaker-${VERSION}-harmonyos-arm64.hap"
+
+      - name: Upload HAP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: harmonyos-hap
+          path: NetworkSpeaker-*-harmonyos-arm64.hap
+
+      - name: Attach HAP to release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          files: NetworkSpeaker-*-harmonyos-arm64.hap
+
   build-linux-cpp:
     runs-on: ubuntu-22.04
 

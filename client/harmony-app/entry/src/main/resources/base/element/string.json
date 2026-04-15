@@ -1,0 +1,72 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "NetworkSpeaker receiver module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Receives UDP audio from desktop and plays it on this device"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "NetworkSpeaker"
+    },
+    {
+      "name": "connection_summary",
+      "value": "Receive UDP audio on this device. Leave sender IPv4 empty to accept packets from any host."
+    },
+    {
+      "name": "sender_host_label",
+      "value": "Sender IPv4 Filter"
+    },
+    {
+      "name": "sender_host_hint",
+      "value": "Optional, for example 192.168.1.10"
+    },
+    {
+      "name": "listen_port_label",
+      "value": "Listen Port"
+    },
+    {
+      "name": "listen_port_hint",
+      "value": "50000"
+    },
+    {
+      "name": "route_hint_label",
+      "value": "Desktop sender target"
+    },
+    {
+      "name": "status_label",
+      "value": "Status"
+    },
+    {
+      "name": "status_stopped",
+      "value": "Receiver stopped."
+    },
+    {
+      "name": "status_starting",
+      "value": "Starting receiver..."
+    },
+    {
+      "name": "status_failed",
+      "value": "Receiver failed to start."
+    },
+    {
+      "name": "start_receiver",
+      "value": "Start Receiver"
+    },
+    {
+      "name": "stop_receiver",
+      "value": "Stop Receiver"
+    },
+    {
+      "name": "invalid_port",
+      "value": "Enter a UDP port between 1 and 65535."
+    },
+    {
+      "name": "invalid_sender_ipv4",
+      "value": "Enter a valid IPv4 address or leave it blank."
+    }
+  ]
+}

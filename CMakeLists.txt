@@ -94,7 +94,7 @@ endif()
 add_library(project_warnings INTERFACE)
 target_compile_options(project_warnings INTERFACE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->)
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive- /utf-8>)
 
 add_library(audio_base INTERFACE)
 target_include_directories(audio_base INTERFACE
