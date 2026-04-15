@@ -2,6 +2,7 @@ import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.Ab
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import nativeBridge from 'libentry.so';
+import { BackgroundAudioManager } from '../model/BackgroundAudioManager';
 
 const DOMAIN = 0x0000;
 
@@ -13,11 +14,15 @@ export default class EntryAbility extends UIAbility {
       hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
+    BackgroundAudioManager.initialize(this.context);
   }
 
   onDestroy(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onDestroy');
-    // Safety: ensure native session is stopped when ability is destroyed.
+    // Clean up background task and AVSession before stopping native session.
+    BackgroundAudioManager.cleanup().catch((err: Object) => {
+      hilog.warn(DOMAIN, 'testTag', 'BackgroundAudioManager cleanup failed: %{public}s', JSON.stringify(err));
+    });
     try {
       nativeBridge.nativeStop();
     } catch (err) {

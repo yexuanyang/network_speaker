@@ -1,10 +1,11 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { common, wantAgent } from '@kit.AbilityKit';
+import { common } from '@kit.AbilityKit';
 import { connection } from '@kit.NetworkKit';
 import nativeBridge from 'libentry.so';
 import { ConnectionConfig, DEFAULT_PORT, ValidationError } from '../model/ConnectionConfig';
 import { SettingsManager } from '../model/SettingsManager';
 import { ValidResult, InvalidResult } from '../model/ConnectionConfig';
+import { BackgroundAudioManager } from '../model/BackgroundAudioManager';
 
 const LOG_DOMAIN: number = 0x0000;
 const LOG_TAG: string = 'IndexPage';
@@ -29,6 +30,10 @@ struct Index {
     }
     this.loadSettings();
     this.refreshRouteHint();
+    BackgroundAudioManager.setPlaybackCommandCallback(
+      () => { this.stopReceiver(); },
+      () => { /* onPlay: no-op -- user must configure and start from UI */ }
+    );
   }
 
   aboutToDisappear(): void {
@@ -196,6 +201,9 @@ struct Index {
         this.statusText = `Listening on UDP ${port} from ${host}.`;
       }
       hilog.info(LOG_DOMAIN, LOG_TAG, 'Receiver started on port %{public}d', port);
+      BackgroundAudioManager.startBackgroundPlayback(host, port).catch((err: Object) => {
+        hilog.warn(LOG_DOMAIN, LOG_TAG, 'Failed to start background playback: %{public}s', JSON.stringify(err));
+      });
     } else {
       this.isRunning = false;
       this.statusText = `Receiver failed to start on UDP ${valid.config.listenPort}.`;
@@ -204,6 +212,9 @@ struct Index {
   }
 
   private stopReceiver(): void {
+    BackgroundAudioManager.stopBackgroundPlayback().catch((err: Object) => {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, 'Failed to stop background playback: %{public}s', JSON.stringify(err));
+    });
     nativeBridge.nativeStop();
     this.isRunning = false;
     this.statusText = 'Receiver stopped.';

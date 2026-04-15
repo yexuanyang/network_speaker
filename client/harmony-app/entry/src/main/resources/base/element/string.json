@@ -67,6 +67,14 @@
     {
       "name": "invalid_sender_ipv4",
       "value": "Enter a valid IPv4 address or leave it blank."
+    },
+    {
+      "name": "bg_notification_title",
+      "value": "NetworkSpeaker"
+    },
+    {
+      "name": "bg_notification_text",
+      "value": "Receiving audio from desktop"
     }
   ]
 }
