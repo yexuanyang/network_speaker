@@ -7,7 +7,6 @@
 .home/
 .idea/
 .worktrees/
-.clangd
 .qwen/
 .qoder/
 
@@ -18,6 +17,8 @@ cmake-build-*/
 out/
 compile_commands.json
 artifacts/
+
+!.clangd
 
 client/android-app/.gradle/
 client/android-app/.idea/
