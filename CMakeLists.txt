@@ -88,7 +88,6 @@ endif()
 
 if(PkgConfig_FOUND AND UNIX AND NOT APPLE)
     pkg_check_modules(PULSE IMPORTED_TARGET libpulse)
-    pkg_check_modules(PULSE_SIMPLE IMPORTED_TARGET libpulse-simple)
 endif()
 
 add_library(project_warnings INTERFACE)
@@ -128,12 +127,9 @@ add_library(host_audio STATIC
 target_include_directories(host_audio PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/server/hostd/include)
 target_link_libraries(host_audio PUBLIC audio_base transport project_warnings)
-if(PULSE_SIMPLE_FOUND)
-    target_link_libraries(host_audio PRIVATE PkgConfig::PULSE_SIMPLE)
-    target_compile_definitions(host_audio PRIVATE NSPEAKER_HAVE_PULSE=1)
-endif()
 if(PULSE_FOUND)
     target_link_libraries(host_audio PRIVATE PkgConfig::PULSE)
+    target_compile_definitions(host_audio PRIVATE NSPEAKER_HAVE_PULSE=1)
 endif()
 if(WIN32)
     target_link_libraries(host_audio PRIVATE ole32 avrt)
