@@ -1,5 +1,7 @@
 # Network Speaker {{VERSION}}
 
+Stream your desktop audio over LAN to Android devices acting as wireless speakers. Supports Windows (WASAPI), Linux (PulseAudio), and Android receivers.
+
 ## Download
 
 | Platform | File |
@@ -41,4 +43,8 @@ Optionally verify Windows checksum: `{{PACKAGE_BASENAME}}.sha256.txt`
 ## Known limitations
 
 - No code signing for Windows yet, so SmartScreen may show a warning
-- No system tray or auto-start in this release
+- Android APK is signed with a debug key; a release keystore will be used in a future version
+
+## Changelog
+
+See [CHANGELOG.md](https://github.com/yexuanyang/network_speaker/blob/main/CHANGELOG.md) for detailed version differences.
