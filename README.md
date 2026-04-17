@@ -25,16 +25,20 @@
 
 ## 下载
 
-### Windows 发送端
+从 [GitHub Releases](https://github.com/yexuanyang/network_speaker/releases) 下载对应平台的安装包。
 
-从 [GitHub Releases](https://github.com/yexuanyang/network_speaker/releases) 下载最新的 MSI 安装包：
+### 桌面发送端（跨平台）
 
-- `NetworkSpeaker-<version>-win-x64.msi` — Windows 安装包
-- 可选下载 `*.sha256.txt` 校验完整性
+桌面端 GUI 基于 Tauri v2 + Vue 3 构建，支持 Windows 和 Linux：
+
+- **Windows**: `NetworkSpeaker-Desktop-<version>-win-x64.zip` 或 `.msi`
+- **Linux (Debian/Ubuntu)**: `Network Speaker_<version>_amd64.deb`
+- **Linux (Fedora/RHEL)**: `Network Speaker-<version>.x86_64.rpm`
+- **Linux (通用)**: `Network Speaker_<version>_amd64.AppImage`
+
+> 旧版 Windows 专用安装包 `NetworkSpeaker-<version>-win-x64.msi` 仍可在 Releases 中找到。
 
 ### Android 接收端
-
-从 [GitHub Releases](https://github.com/yexuanyang/network_speaker/releases) 下载最新的 APK：
 
 - `NetworkSpeaker-<version>.apk` — Android 安装包
 
@@ -64,7 +68,15 @@
 
 ### Linux + Android / HarmonyOS 手机
 
-Linux 发送端目前仅提供命令行方式，需从源码构建 `hostd`（参见 [CLAUDE.md](CLAUDE.md) 中的构建说明）。
+Linux 发送端提供两种方式：
+
+**方式一：桌面 GUI**（推荐）
+
+安装上方下载的 `.deb` / `.rpm` / `.AppImage` 包后直接启动，操作方式与 Windows GUI 相同。
+
+**方式二：命令行**
+
+从源码构建 `hostd` 后使用：
 
 ```bash
 ./hostd --host <手机IP> --port 50000 --source pulse
@@ -95,6 +107,80 @@ adb emu redir add udp:50000:50000
 > 浏览器视频或媒体播放器场景，推荐使用 `Source = Wasapi` + `WASAPI Role = Multimedia`。
 >
 > 如果只想验证连接是否正常，可以将 `Source` 切换为 `Sine` 发送测试蜂鸣声。
+
+## 从源码构建
+
+### C++ 组件 (hostd)
+
+#### Windows
+
+需要 Visual Studio 开发者命令行环境和 vcpkg：
+
+```powershell
+cmake --preset windows-ninja-vcpkg
+cmake --build --preset windows-ninja-vcpkg
+ctest --preset windows-ninja-vcpkg
+```
+
+#### Linux
+
+```bash
+# 安装依赖 (Debian/Ubuntu)
+sudo apt-get install build-essential ninja-build pkg-config \
+  libopus-dev libpulse-dev libgtest-dev
+
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+### 跨平台桌面 GUI (Tauri + Vue)
+
+桌面 GUI 位于 `apps/desktop`，基于 Tauri v2 + Vue 3 + TypeScript。
+
+#### 前置依赖
+
+- Node.js 20+
+- Rust 工具链 (rustup)
+- 平台系统库：
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev \
+  libayatana-appindicator3-dev librsvg2-dev
+
+# Fedora
+sudo dnf install webkit2gtk4.1-devel gtk3-devel \
+  libayatana-appindicator-gtk3-devel librsvg2-devel
+```
+
+#### 开发模式
+
+```bash
+cd apps/desktop
+npm install
+npx tauri dev
+```
+
+#### 生产构建
+
+```bash
+cd apps/desktop
+npm install
+npx tauri build          # 构建二进制及安装包 (.deb, .rpm, .AppImage / .msi)
+```
+
+> Linux 上如果 AppImage 打包时 `strip` 报 `.relr.dyn` 错误（常见于 Fedora 43+ 等新版发行版），加上 `NO_STRIP=true`：
+>
+> ```bash
+> NO_STRIP=true npx tauri build
+> ```
+
+构建产出位于 `apps/desktop/src-tauri/target/release/bundle/`。
+
+### Android 接收端
+
+用 Android Studio 打开 `client/android-app/`，需要 NDK `27.1.12297006`、CMake `3.22.1`、JDK 17。
 
 ## 常见问题
 
