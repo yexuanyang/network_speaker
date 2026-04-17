@@ -1,151 +1,125 @@
-# network_speaker
+# Network Speaker
 
-`network_speaker` 用来把 Windows 电脑当前播放的声音通过局域网转发到 Android 设备，让手机、平板或 Android 模拟器作为网络扬声器使用。
+把电脑正在播放的声音实时转发到手机，让手机变成你的无线网络扬声器。
 
-当前推荐的用户使用路径是：
+支持 Windows / Linux 作为发送端，Android / HarmonyOS 作为接收端，局域网内即可使用，无需互联网。
 
-- 从 [GitHub Releases](https://github.com/yexuanyang/network_speaker/releases) 下载 Windows 安装包
-- 安装 `Network Speaker`
-- 在图形界面里填写 Android 设备 IP、端口和音频来源
-- 点击 `Start` 开始转发
+## 工作原理
 
-如果你是开发者，请看 [docs/CONTRIBUTE.md](docs/CONTRIBUTE.md)。如果你想了解系统架构，请看 [docs/DESIGN.md](docs/DESIGN.md)。
-
-Windows GUI 的开发基线当前为 `.NET 10 SDK + Visual Studio Community 2026`。Visual Studio 相关组件优先通过 Visual Studio Installer 管理；NuGet restore 不属于 Visual Studio Installer 管辖，需由 Visual Studio 或 `dotnet` 在构建/测试时完成。
-
-## 从 Releases 下载
-
-首选方式：
-
-- 打开 [GitHub Releases](https://github.com/yexuanyang/network_speaker/releases)
-- 下载最新的 `NetworkSpeaker-<version>-win-x64.msi`
-- 如需校验完整性，可同时下载对应的 `*.sha256.txt`
-- 安装后从开始菜单启动 `Network Speaker`
-
-如果当前 Release 里还没有可用安装包，你也可以继续使用命令行版 `hostd.exe`。
-
-## 图形界面使用
-
-首版 GUI 支持这些参数：
-
-- `Target IP`
-- `UDP Port`
-- `Source`
-  - `Wasapi`
-  - `Sine`
-- `WASAPI Role`
-  - `Auto`
-  - `Multimedia`
-  - `Console`
-  - `Communications`
-- `Seconds (optional)`
-
-默认值：
-
-- `UDP Port = 50000`
-- `Source = Wasapi`
-- `WASAPI Role = Multimedia`
-- `Seconds` 留空，表示持续发送直到点击 `Stop`
-
-使用步骤：
-
-1. 在 Android 客户端中启动接收，确认显示 `Listening on UDP ...`
-2. 在 Windows GUI 中填写 Android 设备 IPv4 地址
-3. 保持端口与手机端一致，默认 `50000`
-4. 浏览器视频或媒体播放器场景，优先用 `Source=Wasapi` 且 `WASAPI Role=Multimedia`
-5. 点击 `Start`
-6. 需要停止时点击 `Stop`
-
-如果你只是想确认链路是否通，可以先把 `Source` 切换为 `Sine`，然后短时间发送蜂鸣声。
-
-## 仍然可用的命令行方式
-
-如果你希望手动运行 `hostd.exe`，最常见的真机场景命令是：
-
-```powershell
-.\out\build\windows-ninja-vcpkg\hostd.exe --host <手机IP> --port 50000 --source wasapi --wasapi-role multimedia
+```
+电脑 (发送端)                          手机 (接收端)
+┌──────────────┐    局域网 UDP     ┌──────────────┐
+│ 系统音频采集  │ ──→ Opus 编码 ──→ │ 抖动缓冲     │
+│ WASAPI/Pulse │    低延迟传输     │ Opus 解码    │
+└──────────────┘                   │ 扬声器播放    │
+                                   └──────────────┘
 ```
 
-测试蜂鸣声：
+**核心链路**：桌面系统音频 → Opus 低延迟编码 → UDP 发包 → 接收端抖动缓冲与重排 → Opus 解码 → 扬声器播放
 
-```powershell
-.\out\build\windows-ninja-vcpkg\hostd.exe --host <手机IP> --port 50000 --source sine --seconds 4
+**关键设计**：
+- 使用 Opus 编解码，在低带宽下保持高音质
+- UDP 传输配合自定义抖动缓冲区（JitterBuffer），平衡延迟与丢包恢复
+- 每次发送会话生成唯一 `stream_id`，接收端可区分发送端重启与普通丢包
+- 丢包恢复采用两段式策略：新流重置 + 缓冲区深度恢复，避免单次丢包导致永久静音
+
+## 下载
+
+### Windows 发送端
+
+从 [GitHub Releases](https://github.com/yexuanyang/network_speaker/releases) 下载最新的 MSI 安装包：
+
+- `NetworkSpeaker-<version>-win-x64.msi` — Windows 安装包
+- 可选下载 `*.sha256.txt` 校验完整性
+
+### Android 接收端
+
+从 [GitHub Releases](https://github.com/yexuanyang/network_speaker/releases) 下载最新的 APK：
+
+- `NetworkSpeaker-<version>.apk` — Android 安装包
+
+### HarmonyOS 接收端
+
+在华为应用市场搜索 **NetworkSpeaker** 下载安装。
+
+## Quick Start
+
+### Windows + Android 手机
+
+1. 确保电脑和手机连接在**同一局域网**
+2. 在 Windows 上安装并启动 **Network Speaker**
+3. 在 Android 手机上安装并打开 **NetworkSpeaker**，点击开始接收，确认界面显示 `Listening on UDP ...`
+4. 在 Windows GUI 中填写手机的 IPv4 地址，端口保持默认 `50000`
+5. 点击 **Start**，电脑上播放的音频将实时传输到手机扬声器
+6. 需要停止时点击 **Stop**
+
+### Windows + HarmonyOS 手机
+
+1. 确保电脑和手机连接在**同一局域网**
+2. 在 Windows 上安装并启动 **Network Speaker**
+3. 在华为应用市场下载 **NetworkSpeaker** 并打开，点击开始接收
+4. 在 Windows GUI 中填写手机的 IPv4 地址，端口保持默认 `50000`
+5. 点击 **Start** 开始转发
+6. 需要停止时点击 **Stop**
+
+### Linux + Android / HarmonyOS 手机
+
+Linux 发送端目前仅提供命令行方式，需从源码构建 `hostd`（参见 [CLAUDE.md](CLAUDE.md) 中的构建说明）。
+
+```bash
+./hostd --host <手机IP> --port 50000 --source pulse
 ```
 
-## Android 模拟器使用说明
+手机端操作与上述步骤相同。
 
-如果接收端是 Android 模拟器，不要默认把发送目标写成 `10.0.2.16`。当前已验证更稳定的方式是：
+### Android 模拟器
 
-1. 先做 UDP 重定向
-2. 再把发送目标设为 `127.0.0.1`
-
-示例：
+如果接收端是 Android 模拟器，需要先做 UDP 端口重定向：
 
 ```powershell
-$adb = 'C:\Users\11822\AppData\Local\Android\Sdk\platform-tools\adb.exe'
-
-& $adb emu redir add udp:50000:50000
-.\out\build\windows-ninja-vcpkg\hostd.exe --host 127.0.0.1 --port 50000 --source sine --seconds 4
+adb emu redir add udp:50000:50000
 ```
+
+然后在 Windows GUI 中将目标地址填写为 `127.0.0.1`，端口 `50000`，点击 Start。
+
+## Windows GUI 参数说明
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| Target IP | Android 设备的 IPv4 地址 | — |
+| UDP Port | 传输端口，需与手机端一致 | `50000` |
+| Source | 音频来源：`Wasapi`（系统音频）或 `Sine`（测试蜂鸣声） | `Wasapi` |
+| WASAPI Role | 音频角色：`Multimedia` / `Console` / `Communications` / `Auto` | `Multimedia` |
+| Seconds | 发送时长，留空表示持续发送直到手动停止 | 留空 |
+
+> 浏览器视频或媒体播放器场景，推荐使用 `Source = Wasapi` + `WASAPI Role = Multimedia`。
+>
+> 如果只想验证连接是否正常，可以将 `Source` 切换为 `Sine` 发送测试蜂鸣声。
 
 ## 常见问题
 
-### GUI 里显示 `hostd.exe not found`
+### 手机端显示 Listening 但没有声音
 
-优先检查：
+- 检查手机和电脑是否在**同一局域网**
+- 检查手机端监听端口是否与发送端一致（默认均为 `50000`）
+- 检查手机端 `Sender IPv4 Filter` 是否填错，不确定时留空
+- 浏览器视频场景确认使用 `WASAPI Role = Multimedia`
 
-- 你是否安装的是完整 MSI，而不是只拿到了 GUI 可执行文件
-- 如果是开发环境运行 GUI，仓库里是否已经构建出 `out\build\windows-ninja-vcpkg\hostd.exe`
+### GUI 显示 hostd.exe not found
 
-### 客户端显示 `Listening on ...`，但没有声音
-
-优先检查：
-
-- Android 客户端监听端口是否和发送端一致
-- `Sender IPv4 Filter` 是否填错，拿不准就先留空
-- 真机和电脑是否在同一局域网
-- 浏览器视频场景是否使用了 `WASAPI Role = Multimedia`
+- 确认安装的是完整的 MSI 安装包，而不是单独的 GUI 可执行文件
 
 ### 模拟器听不到声音
 
-优先检查：
+- 确认已执行 `adb emu redir add udp:50000:50000`
+- 发送目标地址应为 `127.0.0.1`
+- 模拟器中的接收端应已进入 `Listening on UDP 50000 ...` 状态
 
-- 是否已经执行 `adb emu redir add udp:50000:50000`
-- 发送目标是否为 `127.0.0.1`
-- 模拟器里的接收端是否已经进入 `Listening on UDP 50000 ...`
+### 播放一段时间后无声
 
-### 真机播放一段时间后无声
+接收端已内置丢包恢复机制。如果遇到此问题，请优先更新到最新版本后再验证。
 
-仓库当前已经针对接收侧丢包恢复补了修复。如果你遇到“放一会后无声、重连后又恢复”的情况，请优先使用最新安装包或最新代码重新构建 Android 客户端后再验证。
+## 许可证
 
-详细排查记录见 [debug.md](debug.md)。
+[MIT](LICENSE)
 
-## 当前边界
-
-已支持：
-
-- Windows `WASAPI loopback` 发送
-- Android 真机接收
-- Android 模拟器接收
-- 浏览器视频与系统音频转发
-- Windows 图形界面启动/停止发送
-- Windows MSI 安装包与 GitHub Release 分发流程
-
-当前还不做：
-
-- Linux/macOS GUI
-- 系统托盘
-- 开机自启
-- 自动发现与配对
-- FEC
-- 加密
-- 多声道
-- 代码签名
-
-## 文档
-
-- 开发参与说明：[docs/CONTRIBUTE.md](docs/CONTRIBUTE.md)
-- 架构设计：[docs/DESIGN.md](docs/DESIGN.md)
-- 实施计划：[plan-1.md](plan-1.md)
-- 阶段进展：[progress.md](progress.md)
-- 当前调试记录：[debug.md](debug.md)
