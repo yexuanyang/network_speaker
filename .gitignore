@@ -34,3 +34,8 @@ installer/windows/obj/
 
 *.apk
 clientd-restart-test.out
+
+# Desktop app (Tauri + Vue)
+apps/desktop/node_modules/
+apps/desktop/dist/
+apps/desktop/src-tauri/target/
