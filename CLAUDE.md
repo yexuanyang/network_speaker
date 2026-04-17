@@ -4,16 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`network_speaker` streams Windows desktop audio over LAN UDP to Android devices (phones, tablets, emulators) acting as network speakers. The primary path is: Windows WASAPI loopback → Opus encode → UDP → Android AudioTrack.
+`network_speaker` streams desktop audio over LAN UDP to Android devices (phones, tablets, emulators) acting as network speakers. Supports Windows (WASAPI) and Linux (PulseAudio). The primary path is: WASAPI/PulseAudio capture → Opus encode → UDP → Android AudioTrack.
 
 ## Build Commands
 
 All C++ builds require a Visual Studio Developer PowerShell (or `ilammy/msvc-dev-cmd` in CI) and `VCPKG_ROOT` set to a vcpkg installation.
 
-### C++ (hostd, clientd, tests)
+### C++ (hostd, clientd, tests) — Windows
 
 ```powershell
-# Configure, build, and run tests (single preset)
 cmake --preset windows-ninja-vcpkg
 cmake --build --preset windows-ninja-vcpkg
 ctest --preset windows-ninja-vcpkg
@@ -21,7 +20,29 @@ ctest --preset windows-ninja-vcpkg
 
 Output goes to `out/build/windows-ninja-vcpkg/`.
 
-### Windows GUI (.NET 10 WPF)
+### C++ (hostd, tests) — Linux
+
+```bash
+# Requires: build-essential ninja-build pkg-config libopus-dev libpulse-dev libgtest-dev
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+### Cross-platform Desktop GUI (Tauri + Vue)
+
+```bash
+cd apps/desktop
+npm install
+npx tauri dev        # development with hot-reload
+npx tauri build      # production build
+```
+
+Requires: Node.js 20+, Rust toolchain, and platform-specific Tauri dependencies.
+On Linux: `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev`
+Rust check only: `cd apps/desktop/src-tauri && cargo check`
+
+### Windows GUI (.NET 10 WPF) — Legacy
 
 ```powershell
 # Build
@@ -74,11 +95,13 @@ The system has four layers:
 - `server/hostd` — CLI sender: capture → encode → packetize → UDP send
 - `client/core` — receiver pipeline: UDP recv → `JitterBuffer` → decode → sink callback
 - `client/android-app` — Kotlin foreground service + JNI bridge to `client/core`; PCM delivered to `AudioTrack`
-- `apps/windows-launcher` — WPF GUI that spawns a hidden `hostd.exe` subprocess, reads its stdout/stderr, and exposes Start/Stop UI. Settings persisted to `%AppData%\NetworkSpeaker\settings.json`. `hostd.exe` is resolved at runtime (same directory first, then known build dirs).
+- `apps/desktop` — Cross-platform Tauri v2 + Vue 3 desktop GUI. Rust backend manages hostd subprocess lifecycle (state machine: Stopped → Starting → Running → Stopping → Stopped/Faulted), device enumeration, and settings persistence. Vue frontend with adaptive light/dark theme, smooth CSS transitions. Replaces the legacy Windows-only WPF launcher.
+- `apps/windows-launcher` — (Legacy) WPF GUI, Windows-only. Being replaced by `apps/desktop`.
 
 **4. Distribution**
 - `installer/windows/` — WiX v4 MSI (bundles `NetworkSpeaker.exe` + `hostd.exe` + Start Menu shortcut)
-- `.github/workflows/release.yml` — triggered by `v*` tag push; builds, tests, publishes, packages MSI, uploads to GitHub Release
+- `apps/desktop` — Tauri produces platform-native bundles (`.deb`, `.AppImage` on Linux; `.msi`, `.exe` on Windows)
+- `.github/workflows/release.yml` — triggered by `v*` tag push; builds C++, desktop app, Android APK, packages, uploads to GitHub Release
 
 ## Protocol Design
 
