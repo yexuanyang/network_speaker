@@ -231,6 +231,180 @@ jobs:
           name: ${{ github.ref_name }}
           files: NetworkSpeaker-*-linux-amd64-${{ matrix.label }}.tar.gz
 
+  build-desktop-linux:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ninja-build pkg-config \
+            libopus-dev libpulse-dev libgtest-dev \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install modern CMake
+        run: |
+          pip install cmake 2>/dev/null || PIP_BREAK_SYSTEM_PACKAGES=1 pip install cmake
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            DISPLAY_VERSION="${{ github.ref_name }}"
+            DISPLAY_VERSION="${DISPLAY_VERSION#v}"
+          else
+            DISPLAY_VERSION="${{ inputs.version }}"
+          fi
+          echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build hostd
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          cmake --build build --target hostd
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Build Tauri app
+        working-directory: apps/desktop
+        run: npx tauri build
+
+      - name: Package desktop app
+        run: |
+          VERSION="${{ steps.version.outputs.display_version }}"
+          ARCHIVE_DIR="NetworkSpeaker-Desktop-${VERSION}-linux-amd64"
+          mkdir "$ARCHIVE_DIR"
+          # Copy Tauri bundle outputs
+          cp apps/desktop/src-tauri/target/release/network-speaker-desktop "$ARCHIVE_DIR/"
+          cp build/hostd "$ARCHIVE_DIR/"
+          # Include deb if built
+          find apps/desktop/src-tauri/target/release/bundle/deb -name '*.deb' -exec cp {} . \; 2>/dev/null || true
+          find apps/desktop/src-tauri/target/release/bundle/appimage -name '*.AppImage' -exec cp {} . \; 2>/dev/null || true
+          tar -czf "${ARCHIVE_DIR}.tar.gz" "$ARCHIVE_DIR"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: |
+            NetworkSpeaker-Desktop-*-linux-amd64.tar.gz
+            *.deb
+            *.AppImage
+
+      - name: Attach to release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          files: |
+            NetworkSpeaker-Desktop-*-linux-amd64.tar.gz
+            *.deb
+            *.AppImage
+
+  build-desktop-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Initialize MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "push") {
+            $displayVersion = "${{ github.ref_name }}" -replace '^v', ''
+          } else {
+            $displayVersion = "${{ inputs.version }}"
+          }
+          "display_version=$displayVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build hostd
+        shell: pwsh
+        run: |
+          cmake --preset windows-ninja-vcpkg
+          cmake --build --preset windows-ninja-vcpkg --target hostd
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Build Tauri app
+        working-directory: apps/desktop
+        run: npx tauri build
+
+      - name: Package desktop app
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.display_version }}"
+          $archiveDir = "NetworkSpeaker-Desktop-$version-win-x64"
+          New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
+          Copy-Item "apps\desktop\src-tauri\target\release\network-speaker-desktop.exe" "$archiveDir\"
+          Copy-Item "out\build\windows-ninja-vcpkg\hostd.exe" "$archiveDir\"
+          # Include MSI installer if built by Tauri
+          Get-ChildItem -Recurse -Path "apps\desktop\src-tauri\target\release\bundle\msi" -Filter "*.msi" |
+            Copy-Item -Destination . -ErrorAction SilentlyContinue
+          Get-ChildItem -Recurse -Path "apps\desktop\src-tauri\target\release\bundle\nsis" -Filter "*.exe" |
+            Copy-Item -Destination . -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$archiveDir\*" -DestinationPath "$archiveDir.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: |
+            NetworkSpeaker-Desktop-*-win-x64.zip
+            *.msi
+            *.exe
+
+      - name: Attach to release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          files: |
+            NetworkSpeaker-Desktop-*-win-x64.zip
+            *.msi
+
   build-linux-rpm:
     runs-on: ubuntu-latest
     container: fedora:latest

@@ -6,11 +6,13 @@ Stream your desktop audio over LAN to Android devices acting as wireless speaker
 
 | Platform | File |
 |----------|------|
-| Windows x64 | `{{PACKAGE_BASENAME}}.msi` |
+| Windows x64 (Desktop App) | `NetworkSpeaker-Desktop-{{VERSION}}-win-x64.zip` |
+| Windows x64 (MSI Installer) | `{{PACKAGE_BASENAME}}.msi` |
+| Linux x64 (Desktop App) | `NetworkSpeaker-Desktop-{{VERSION}}-linux-amd64.tar.gz` |
 | Android arm64 | `NetworkSpeaker-{{VERSION}}-android-arm64.apk` |
-| Linux x64 (Ubuntu 22.04) | `NetworkSpeaker-{{VERSION}}-linux-amd64-ubuntu2204.tar.gz` |
-| Linux x64 (Ubuntu 24.04) | `NetworkSpeaker-{{VERSION}}-linux-amd64-ubuntu2404.tar.gz` |
-| Linux x64 (RPM) | `NetworkSpeaker-{{VERSION}}-linux-x86_64.rpm` |
+| Linux x64 (Ubuntu 22.04, CLI) | `NetworkSpeaker-{{VERSION}}-linux-amd64-ubuntu2204.tar.gz` |
+| Linux x64 (Ubuntu 24.04, CLI) | `NetworkSpeaker-{{VERSION}}-linux-amd64-ubuntu2404.tar.gz` |
+| Linux x64 (RPM, CLI) | `NetworkSpeaker-{{VERSION}}-linux-x86_64.rpm` |
 
 Optionally verify Windows checksum: `{{PACKAGE_BASENAME}}.sha256.txt`
 
