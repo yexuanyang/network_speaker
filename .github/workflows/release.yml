@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - staging
   workflow_dispatch:
     inputs:
       version:
@@ -15,7 +17,64 @@ permissions:
   contents: write
 
 jobs:
+  resolve-release:
+    runs-on: ubuntu-latest
+    outputs:
+      display_version: ${{ steps.meta.outputs.display_version }}
+      numeric_version: ${{ steps.meta.outputs.numeric_version }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
+      should_release: ${{ steps.meta.outputs.should_release }}
+    steps:
+      - name: Resolve release metadata
+        id: meta
+        run: |
+          EVENT="${{ github.event_name }}"
+          REF="${{ github.ref_name }}"
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+
+          if [ "$EVENT" = "push" ]; then
+            if [[ "$REF" == v* ]]; then
+              # Tag push: stable release
+              DISPLAY_VERSION="${REF#v}"
+              RELEASE_TAG="$REF"
+              IS_PRERELEASE="false"
+              SHOULD_RELEASE="true"
+            elif [ "$REF" = "staging" ]; then
+              # Staging branch push: pre-release
+              DISPLAY_VERSION="0.3.0-staging.${SHORT_SHA}"
+              RELEASE_TAG="staging-latest"
+              IS_PRERELEASE="true"
+              SHOULD_RELEASE="true"
+            fi
+          else
+            # workflow_dispatch: dry-run, no release
+            DISPLAY_VERSION="${{ inputs.version }}"
+            RELEASE_TAG=""
+            IS_PRERELEASE="false"
+            SHOULD_RELEASE="false"
+          fi
+
+          if [ -z "$DISPLAY_VERSION" ]; then
+            echo "::error::Display version is required"
+            exit 1
+          fi
+
+          NUMERIC_VERSION=$(echo "$DISPLAY_VERSION" | grep -oP '^\d+\.\d+\.\d+')
+          if [ -z "$NUMERIC_VERSION" ]; then
+            echo "::error::Display version must start with x.y.z"
+            exit 1
+          fi
+
+          echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "numeric_version=$NUMERIC_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
+
   build-windows-release:
+    needs: [resolve-release]
     runs-on: windows-latest
 
     steps:
@@ -32,32 +91,6 @@ jobs:
       - name: Initialize MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Resolve version metadata
-        id: version
-        shell: pwsh
-        run: |
-          if ("${{ github.event_name }}" -eq "push") {
-            $displayVersion = "${{ github.ref_name }}" -replace '^v', ''
-          } else {
-            $displayVersion = "${{ inputs.version }}"
-          }
-
-          if ([string]::IsNullOrWhiteSpace($displayVersion)) {
-            throw "Display version is required."
-          }
-
-          $match = [regex]::Match($displayVersion, '^(?<numeric>\d+\.\d+\.\d+)')
-          if (-not $match.Success) {
-            throw "Display version '$displayVersion' must start with a numeric x.y.z prefix."
-          }
-
-          $numericVersion = $match.Groups["numeric"].Value
-          $packageBaseName = "NetworkSpeaker-$displayVersion-win-x64"
-
-          "display_version=$displayVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "numeric_version=$numericVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "package_base_name=$packageBaseName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
       - name: Run launcher core tests
         shell: pwsh
         run: |
@@ -66,9 +99,11 @@ jobs:
       - name: Package Windows installer
         shell: pwsh
         run: |
+          $version = "${{ needs.resolve-release.outputs.display_version }}"
+          $packageBaseName = "NetworkSpeaker-$version-win-x64"
           .\tools\package-windows-installer.ps1 `
-            -Version "${{ steps.version.outputs.display_version }}" `
-            -PackageBaseName "${{ steps.version.outputs.package_base_name }}"
+            -Version "$version" `
+            -PackageBaseName "$packageBaseName"
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
@@ -78,27 +113,20 @@ jobs:
             artifacts/release/*.msi
             artifacts/release/*.sha256.txt
 
-      - name: Generate release notes
-        if: github.event_name == 'push'
-        shell: pwsh
-        run: |
-          $template = Get-Content .github\release-notes-template.md -Raw
-          $notes = $template.Replace("{{VERSION}}", "${{ steps.version.outputs.display_version }}")
-          $notes = $notes.Replace("{{PACKAGE_BASENAME}}", "${{ steps.version.outputs.package_base_name }}")
-          Set-Content -LiteralPath release-notes.md -Value $notes -Encoding utf8
-
-      - name: Publish GitHub release
-        if: github.event_name == 'push'
+      - name: Attach to release
+        if: needs.resolve-release.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
-          body_path: release-notes.md
+          tag_name: ${{ needs.resolve-release.outputs.release_tag }}
+          name: ${{ needs.resolve-release.outputs.release_tag }}
+          prerelease: ${{ needs.resolve-release.outputs.is_prerelease == 'true' }}
+          make_latest: ${{ needs.resolve-release.outputs.is_prerelease != 'true' }}
           files: |
             artifacts/release/*.msi
             artifacts/release/*.sha256.txt
-            ${{ github.workspace }}/client/android-app/app/build/outputs/apk/release/*.apk
 
   build-android-release:
+    needs: [resolve-release]
     runs-on: ubuntu-latest
 
     steps:
@@ -143,7 +171,7 @@ jobs:
 
       - name: Rename APK with version
         run: |
-          VERSION="${{ github.event_name == 'push' && github.ref_name || inputs.version }}"
+          VERSION="${{ needs.resolve-release.outputs.display_version }}"
           cp "${{ steps.find_apk.outputs.apk_path }}" \
              "NetworkSpeaker-${VERSION}-android-arm64.apk"
 
@@ -153,14 +181,18 @@ jobs:
           name: android-apk
           path: NetworkSpeaker-*-android-arm64.apk
 
-      - name: Attach APK to release
-        if: github.event_name == 'push'
+      - name: Attach to release
+        if: needs.resolve-release.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ needs.resolve-release.outputs.release_tag }}
+          name: ${{ needs.resolve-release.outputs.release_tag }}
+          prerelease: ${{ needs.resolve-release.outputs.is_prerelease == 'true' }}
+          make_latest: ${{ needs.resolve-release.outputs.is_prerelease != 'true' }}
           files: NetworkSpeaker-*-android-arm64.apk
 
   build-linux-hostd:
+    needs: [resolve-release]
     strategy:
       matrix:
         include:
@@ -187,17 +219,6 @@ jobs:
           pip install cmake 2>/dev/null || PIP_BREAK_SYSTEM_PACKAGES=1 pip install cmake
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Resolve version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            DISPLAY_VERSION="${{ github.ref_name }}"
-            DISPLAY_VERSION="${DISPLAY_VERSION#v}"
-          else
-            DISPLAY_VERSION="${{ inputs.version }}"
-          fi
-          echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Configure
         run: |
           cmake -B build -G Ninja \
@@ -212,7 +233,7 @@ jobs:
 
       - name: Package
         run: |
-          VERSION="${{ steps.version.outputs.display_version }}"
+          VERSION="${{ needs.resolve-release.outputs.display_version }}"
           ARCHIVE_DIR="NetworkSpeaker-${VERSION}-linux-amd64-${{ matrix.label }}"
           mkdir "$ARCHIVE_DIR"
           cp build/hostd "$ARCHIVE_DIR/"
@@ -225,13 +246,17 @@ jobs:
           path: NetworkSpeaker-*-linux-amd64-${{ matrix.label }}.tar.gz
 
       - name: Attach to release
-        if: github.event_name == 'push'
+        if: needs.resolve-release.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ needs.resolve-release.outputs.release_tag }}
+          name: ${{ needs.resolve-release.outputs.release_tag }}
+          prerelease: ${{ needs.resolve-release.outputs.is_prerelease == 'true' }}
+          make_latest: ${{ needs.resolve-release.outputs.is_prerelease != 'true' }}
           files: NetworkSpeaker-*-linux-amd64-${{ matrix.label }}.tar.gz
 
   build-desktop-linux:
+    needs: [resolve-release]
     runs-on: ubuntu-22.04
 
     steps:
@@ -266,17 +291,6 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri
 
-      - name: Resolve version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            DISPLAY_VERSION="${{ github.ref_name }}"
-            DISPLAY_VERSION="${DISPLAY_VERSION#v}"
-          else
-            DISPLAY_VERSION="${{ inputs.version }}"
-          fi
-          echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Build hostd
         run: |
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
@@ -292,7 +306,7 @@ jobs:
 
       - name: Package desktop app
         run: |
-          VERSION="${{ steps.version.outputs.display_version }}"
+          VERSION="${{ needs.resolve-release.outputs.display_version }}"
           ARCHIVE_DIR="NetworkSpeaker-Desktop-${VERSION}-linux-amd64"
           mkdir "$ARCHIVE_DIR"
           # Copy Tauri bundle outputs
@@ -313,16 +327,20 @@ jobs:
             *.AppImage
 
       - name: Attach to release
-        if: github.event_name == 'push'
+        if: needs.resolve-release.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ needs.resolve-release.outputs.release_tag }}
+          name: ${{ needs.resolve-release.outputs.release_tag }}
+          prerelease: ${{ needs.resolve-release.outputs.is_prerelease == 'true' }}
+          make_latest: ${{ needs.resolve-release.outputs.is_prerelease != 'true' }}
           files: |
             NetworkSpeaker-Desktop-*-linux-amd64.tar.gz
             *.deb
             *.AppImage
 
   build-desktop-windows:
+    needs: [resolve-release]
     runs-on: windows-latest
 
     steps:
@@ -347,17 +365,6 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri
 
-      - name: Resolve version
-        id: version
-        shell: pwsh
-        run: |
-          if ("${{ github.event_name }}" -eq "push") {
-            $displayVersion = "${{ github.ref_name }}" -replace '^v', ''
-          } else {
-            $displayVersion = "${{ inputs.version }}"
-          }
-          "display_version=$displayVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
       - name: Build hostd
         shell: pwsh
         run: |
@@ -375,7 +382,7 @@ jobs:
       - name: Package desktop app
         shell: pwsh
         run: |
-          $version = "${{ steps.version.outputs.display_version }}"
+          $version = "${{ needs.resolve-release.outputs.display_version }}"
           $archiveDir = "NetworkSpeaker-Desktop-$version-win-x64"
           New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
           Copy-Item "apps\desktop\src-tauri\target\release\network-speaker-desktop.exe" "$archiveDir\"
@@ -397,15 +404,19 @@ jobs:
             *.exe
 
       - name: Attach to release
-        if: github.event_name == 'push'
+        if: needs.resolve-release.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ needs.resolve-release.outputs.release_tag }}
+          name: ${{ needs.resolve-release.outputs.release_tag }}
+          prerelease: ${{ needs.resolve-release.outputs.is_prerelease == 'true' }}
+          make_latest: ${{ needs.resolve-release.outputs.is_prerelease != 'true' }}
           files: |
             NetworkSpeaker-Desktop-*-win-x64.zip
             *.msi
 
   build-linux-rpm:
+    needs: [resolve-release]
     runs-on: ubuntu-latest
     container: fedora:latest
 
@@ -424,17 +435,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            DISPLAY_VERSION="${{ github.ref_name }}"
-            DISPLAY_VERSION="${DISPLAY_VERSION#v}"
-          else
-            DISPLAY_VERSION="${{ inputs.version }}"
-          fi
-          echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Configure
         run: |
           cmake -B build -G Ninja \
@@ -449,7 +449,7 @@ jobs:
 
       - name: Build RPM
         run: |
-          VERSION="${{ steps.version.outputs.display_version }}"
+          VERSION="${{ needs.resolve-release.outputs.display_version }}"
           RPM_VERSION=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
           RPM_RELEASE_SUFFIX=$(echo "$VERSION" | sed "s/^${RPM_VERSION}-\\?//;s/-/_/g")
           if [ -z "$RPM_RELEASE_SUFFIX" ]; then
@@ -492,8 +492,47 @@ jobs:
           path: NetworkSpeaker-*-linux-x86_64.rpm
 
       - name: Attach to release
-        if: github.event_name == 'push'
+        if: needs.resolve-release.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ needs.resolve-release.outputs.release_tag }}
+          name: ${{ needs.resolve-release.outputs.release_tag }}
+          prerelease: ${{ needs.resolve-release.outputs.is_prerelease == 'true' }}
+          make_latest: ${{ needs.resolve-release.outputs.is_prerelease != 'true' }}
           files: NetworkSpeaker-*-linux-x86_64.rpm
+
+  generate-release-notes:
+    needs: [resolve-release, build-windows-release, build-android-release, build-linux-hostd, build-desktop-linux, build-desktop-windows, build-linux-rpm]
+    if: needs.resolve-release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate and update release notes
+        run: |
+          VERSION="${{ needs.resolve-release.outputs.display_version }}"
+          TAG="${{ needs.resolve-release.outputs.release_tag }}"
+          IS_PRE="${{ needs.resolve-release.outputs.is_prerelease }}"
+          PACKAGE_BASENAME="NetworkSpeaker-${VERSION}-win-x64"
+
+          TEMPLATE=$(cat .github/release-notes-template.md)
+          NOTES="${TEMPLATE//\{\{VERSION\}\}/$VERSION}"
+          NOTES="${NOTES//\{\{PACKAGE_BASENAME\}\}/$PACKAGE_BASENAME}"
+
+          if [ "$IS_PRE" = "true" ]; then
+            HEADER="## Pre-release: ${VERSION}\n\n> **Warning**: This is an unstable pre-release from the \`staging\` branch. Use for testing only.\n\n"
+            NOTES="${HEADER}${NOTES}"
+          fi
+
+          echo "$NOTES" > release-notes.md
+
+      - name: Update release body
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve-release.outputs.release_tag }}
+          name: ${{ needs.resolve-release.outputs.release_tag }}
+          body_path: release-notes.md
+          prerelease: ${{ needs.resolve-release.outputs.is_prerelease == 'true' }}
+          make_latest: ${{ needs.resolve-release.outputs.is_prerelease != 'true' }}
