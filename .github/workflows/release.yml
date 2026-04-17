@@ -302,6 +302,8 @@ jobs:
 
       - name: Build Tauri app
         working-directory: apps/desktop
+        env:
+          NO_STRIP: "true"
         run: npx tauri build
 
       - name: Package desktop app
