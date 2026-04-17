@@ -178,6 +178,8 @@ npx tauri build          # 构建二进制及安装包 (.deb, .rpm, .AppImage / 
 
 构建产出位于 `apps/desktop/src-tauri/target/release/bundle/`。
 
+除安装包外，构建还会生成独立可执行文件 `apps/desktop/src-tauri/target/release/network-speaker-desktop`（Linux）或 `network-speaker-desktop.exe`（Windows），前端资源已嵌入其中，可直接运行而无需安装。
+
 ### Android 接收端
 
 用 Android Studio 打开 `client/android-app/`，需要 NDK `27.1.12297006`、CMake `3.22.1`、JDK 17。
