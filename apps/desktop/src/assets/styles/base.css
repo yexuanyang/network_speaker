@@ -18,13 +18,13 @@ html {
 
 body {
   min-height: 100vh;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 #app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 100vh;
   padding: var(--space-xl);
   gap: var(--space-lg);
 }
