@@ -20,6 +20,8 @@ artifacts/
 
 !.clangd
 
+client/harmony-app/build-profile.json5
+
 client/android-app/.gradle/
 client/android-app/.idea/
 client/android-app/.kotlin/
