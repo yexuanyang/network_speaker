@@ -32,6 +32,7 @@ pub struct AudioDeviceInfo {
     pub id: String,
     pub name: String,
     pub description: String,
+    #[serde(alias = "default")]
     pub is_default: bool,
 }
 
