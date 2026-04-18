@@ -30,7 +30,6 @@ fn main() {
                 window.open_devtools();
             }
 
-            #[cfg(feature = "tray")]
             network_speaker_desktop::tray::setup_tray(&handle)?;
 
             Ok(())
@@ -50,15 +49,10 @@ fn main() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let handle = window.app_handle().clone();
-                let mgr = handle.state::<Arc<HostdProcessManager>>();
-                let is_running =
-                    tauri::async_runtime::block_on(async { mgr.is_running().await });
-
-                if is_running {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
+                // Always minimize to system tray instead of exiting.
+                // Use "Exit" from the tray menu to actually quit the application.
+                api.prevent_close();
+                let _ = window.hide();
             }
         })
         .run(tauri::generate_context!())

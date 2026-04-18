@@ -4,7 +4,7 @@ version = "0.3.0"
 edition = "2021"
 
 [features]
-default = ["custom-protocol"]
+default = ["custom-protocol", "tray"]
 custom-protocol = ["tauri/custom-protocol"]
 tray = ["tauri/tray-icon"]
 
@@ -12,7 +12,7 @@ tray = ["tauri/tray-icon"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["devtools"] }
+tauri = { version = "2", features = ["devtools", "image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-os = "2"
 serde = { version = "1", features = ["derive"] }

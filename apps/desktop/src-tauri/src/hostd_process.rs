@@ -241,13 +241,21 @@ impl HostdProcessManager {
     }
 
     async fn emit_state_changed(&self) {
-        let inner = self.inner.lock().await;
-        let status = HostdStatus {
-            state: inner.state,
-            status_text: inner.status_text.clone(),
-            hostd_path: None,
-            command_preview: String::new(),
+        let (status, is_running) = {
+            let inner = self.inner.lock().await;
+            let is_running = matches!(
+                inner.state,
+                ProcessState::Starting | ProcessState::Running | ProcessState::Stopping
+            );
+            let status = HostdStatus {
+                state: inner.state,
+                status_text: inner.status_text.clone(),
+                hostd_path: None,
+                command_preview: String::new(),
+            };
+            (status, is_running)
         };
         let _ = self.app_handle.emit("hostd-state-changed", &status);
+        crate::tray::update_tray_label(&self.app_handle, is_running);
     }
 }

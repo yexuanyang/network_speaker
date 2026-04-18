@@ -1,14 +1,18 @@
-#![cfg(feature = "tray")]
-
 use std::sync::Arc;
 
 use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder},
+    image::Image,
+    menu::{MenuBuilder, MenuItem, MenuItemBuilder},
     tray::TrayIconBuilder,
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 use crate::hostd_process::HostdProcessManager;
+
+/// Holds a reference to the toggle menu item so we can update its label at runtime.
+pub struct TrayMenuState {
+    toggle_item: MenuItem<tauri::Wry>,
+}
 
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_item = MenuItemBuilder::with_id("show", "Show Window").build(app)?;
@@ -23,8 +27,15 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .item(&quit_item)
         .build()?;
 
+    app.manage(TrayMenuState {
+        toggle_item: toggle_item.clone(),
+    });
+
+    let icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))?;
+
     let app_handle = app.clone();
-    TrayIconBuilder::new()
+    TrayIconBuilder::with_id("main")
+        .icon(icon)
         .menu(&menu)
         .tooltip("Network Speaker")
         .on_menu_event(move |tray_app, event| {
@@ -76,19 +87,13 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-pub async fn update_tray_label(app: &AppHandle, is_running: bool) {
-    if let Some(tray) = app.tray_by_id("main") {
-        if let Some(menu) = tray.menu() {
-            if let Some(item) = menu.get("toggle_streaming") {
-                if let Some(menu_item) = item.as_menuitem() {
-                    let text = if is_running {
-                        "Stop Streaming"
-                    } else {
-                        "Start Streaming"
-                    };
-                    let _ = menu_item.set_text(text);
-                }
-            }
-        }
+pub fn update_tray_label(app: &AppHandle, is_running: bool) {
+    if let Some(state) = app.try_state::<TrayMenuState>() {
+        let text = if is_running {
+            "Stop Streaming"
+        } else {
+            "Start Streaming"
+        };
+        let _ = state.toggle_item.set_text(text);
     }
 }
