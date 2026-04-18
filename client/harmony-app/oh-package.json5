@@ -1,6 +1,8 @@
 {
   "modelVersion": "6.0.2",
-  "description": "Please describe the basic information.",
+  "description": "NetworkSpeaker HarmonyOS client - receives LAN UDP audio streams and plays back via device speaker.",
+  "author": "yexuanyang",
+  "license": "MIT",
   "dependencies": {
   },
   "devDependencies": {

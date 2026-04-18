@@ -1,10 +1,10 @@
 {
   "name": "entry",
-  "version": "1.0.0",
-  "description": "Please describe the basic information.",
+  "version": "1.0.1",
+  "description": "NetworkSpeaker HarmonyOS client entry module - UDP audio receiver and playback.",
   "main": "",
-  "author": "",
-  "license": "",
+  "author": "yexuanyang",
+  "license": "MIT",
   "dependencies": {
     "libentry.so": "file:./src/main/cpp/types/libentry"
   }
