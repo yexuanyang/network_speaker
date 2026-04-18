@@ -68,12 +68,19 @@ impl HostdProcessManager {
             .await;
         self.emit_log(&format!("Started: {}", command.display_command_line), false);
 
-        let mut child = Command::new(&command.executable_path)
-            .args(&command.arguments)
+        let mut cmd = Command::new(&command.executable_path);
+        cmd.args(&command.arguments)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
+            .kill_on_drop(true);
+
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        let mut child = cmd.spawn()
             .map_err(|e| {
                 let msg = format!("Failed to start hostd: {e}");
                 // We'll transition to faulted in the caller
