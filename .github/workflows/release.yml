@@ -296,6 +296,9 @@ jobs:
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
           cmake --build build --target hostd
 
+      - name: Stage hostd sidecar
+        run: cp build/hostd apps/desktop/src-tauri/binaries/hostd-x86_64-unknown-linux-gnu
+
       - name: Install frontend dependencies
         working-directory: apps/desktop
         run: npm ci
@@ -354,6 +357,9 @@ jobs:
       - name: Initialize MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Install modern CMake
+        run: pip install cmake
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -370,8 +376,13 @@ jobs:
       - name: Build hostd
         shell: pwsh
         run: |
-          cmake --preset windows-ninja-vcpkg
-          cmake --build --preset windows-ninja-vcpkg --target hostd
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          cmake --build build --target hostd
+
+      - name: Stage hostd sidecar
+        shell: pwsh
+        run: |
+          Copy-Item "build\hostd.exe" "apps\desktop\src-tauri\binaries\hostd-x86_64-pc-windows-msvc.exe" -Force
 
       - name: Install frontend dependencies
         working-directory: apps/desktop
@@ -388,7 +399,7 @@ jobs:
           $archiveDir = "NetworkSpeaker-Desktop-$version-win-x64"
           New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
           Copy-Item "apps\desktop\src-tauri\target\release\network-speaker-desktop.exe" "$archiveDir\"
-          Copy-Item "out\build\windows-ninja-vcpkg\hostd.exe" "$archiveDir\"
+          Copy-Item "build\hostd.exe" "$archiveDir\"
           # Include MSI installer if built by Tauri
           Get-ChildItem -Recurse -Path "apps\desktop\src-tauri\target\release\bundle\msi" -Filter "*.msi" |
             Copy-Item -Destination . -ErrorAction SilentlyContinue
