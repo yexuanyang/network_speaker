@@ -10,6 +10,7 @@
 .qwen/
 .qoder/
 .specify/
+.claude/
 
 build/
 build-nocache/
