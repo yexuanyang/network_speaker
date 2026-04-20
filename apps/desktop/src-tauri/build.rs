@@ -19,7 +19,11 @@ fn copy_hostd_binary() {
         .expect("CARGO_MANIFEST_DIR not set");
 
     let binaries_dir = manifest_dir.join("binaries");
-    let target_binary_name = format!("hostd-{}", target_triple);
+    let target_binary_name = if target_triple.contains("windows") {
+        format!("hostd-{}.exe", target_triple)
+    } else {
+        format!("hostd-{}", target_triple)
+    };
     let target_binary_path = binaries_dir.join(&target_binary_name);
 
     // 如果目标二进制文件已存在，跳过复制
