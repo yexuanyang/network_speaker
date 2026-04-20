@@ -36,6 +36,29 @@ The C++ tests are compiled into a single GoogleTest binary. Filter with `--gtest
 .\out\build\windows-ninja-vcpkg\network_speaker_tests.exe --gtest_filter="JitterBufferTest.*"
 ```
 
+### Desktop GUI (Tauri + Vue)
+
+Requires Node.js 20+, Rust toolchain, and platform-specific Tauri dependencies.
+
+```bash
+# Linux
+cmake --preset linux-desktop
+cmake --build --preset linux-desktop
+
+# Windows (Visual Studio Developer PowerShell + vcpkg)
+cmake --preset windows-desktop
+cmake --build --preset windows-desktop
+```
+
+This automatically builds `hostd` first, runs `npm ci`, then `npx tauri build`.
+
+Alternatively, pass the option manually to an existing preset:
+
+```bash
+cmake --preset linux-ninja-system -DNSPEAKER_BUILD_DESKTOP_GUI=ON
+cmake --build --preset linux-ninja-system --target desktop_app
+```
+
 ### Windows GUI (.NET 10 WPF)
 
 ```powershell

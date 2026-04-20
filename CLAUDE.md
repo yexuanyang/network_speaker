@@ -31,6 +31,23 @@ ctest --test-dir build --output-on-failure
 
 ### Cross-platform Desktop GUI (Tauri + Vue)
 
+Requires Node.js 20+, Rust toolchain, and platform-specific Tauri dependencies.
+On Linux: `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev`
+
+**CMake integrated build** (recommended — automatically builds hostd first):
+
+```bash
+# Linux
+cmake --preset linux-desktop
+cmake --build --preset linux-desktop
+
+# Windows (Visual Studio Developer PowerShell + vcpkg)
+cmake --preset windows-desktop
+cmake --build --preset windows-desktop
+```
+
+**Manual build** (development / hot-reload):
+
 ```bash
 cd apps/desktop
 npm install
@@ -38,8 +55,6 @@ npx tauri dev        # development with hot-reload
 npx tauri build      # production build
 ```
 
-Requires: Node.js 20+, Rust toolchain, and platform-specific Tauri dependencies.
-On Linux: `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev`
 Rust check only: `cd apps/desktop/src-tauri && cargo check`
 
 ### Windows GUI (.NET 10 WPF) — Legacy

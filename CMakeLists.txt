@@ -172,3 +172,61 @@ if(BUILD_TESTING AND NOT NSPEAKER_GTEST_TARGET STREQUAL "")
 elseif(BUILD_TESTING)
     message(WARNING "GoogleTest not found. Skipping network_speaker_tests target.")
 endif()
+
+# ---------------------------------------------------------------------------
+# Optional: Tauri desktop GUI application
+# ---------------------------------------------------------------------------
+option(NSPEAKER_BUILD_DESKTOP_GUI
+       "Build the Tauri desktop GUI (requires Node.js 20+, npm, Rust/Cargo)" OFF)
+
+if(NSPEAKER_BUILD_DESKTOP_GUI)
+    # -- Detect toolchain ---------------------------------------------------
+    find_program(NSPEAKER_NPM NAMES npm npm.cmd)
+    if(NOT NSPEAKER_NPM)
+        message(FATAL_ERROR
+            "NSPEAKER_BUILD_DESKTOP_GUI is ON but npm was not found.\n"
+            "Install Node.js 20+ from https://nodejs.org/ "
+            "or set -DNSPEAKER_BUILD_DESKTOP_GUI=OFF")
+    endif()
+
+    find_program(NSPEAKER_NPX NAMES npx npx.cmd)
+    if(NOT NSPEAKER_NPX)
+        message(FATAL_ERROR
+            "NSPEAKER_BUILD_DESKTOP_GUI is ON but npx was not found.\n"
+            "It should be installed alongside npm. Check your Node.js installation.")
+    endif()
+
+    find_program(NSPEAKER_CARGO NAMES cargo cargo.exe)
+    if(NOT NSPEAKER_CARGO)
+        message(FATAL_ERROR
+            "NSPEAKER_BUILD_DESKTOP_GUI is ON but cargo was not found.\n"
+            "Install Rust from https://rustup.rs/ "
+            "or set -DNSPEAKER_BUILD_DESKTOP_GUI=OFF")
+    endif()
+
+    # -- Path definitions ---------------------------------------------------
+    set(NSPEAKER_DESKTOP_DIR "${CMAKE_SOURCE_DIR}/apps/desktop")
+    set(NSPEAKER_NPM_STAMP   "${CMAKE_BINARY_DIR}/desktop_npm_install.stamp")
+
+    # -- Step 1: npm ci (stamp file avoids redundant runs) ------------------
+    add_custom_command(
+        OUTPUT  "${NSPEAKER_NPM_STAMP}"
+        COMMAND "${NSPEAKER_NPM}" ci
+        COMMAND "${CMAKE_COMMAND}" -E touch "${NSPEAKER_NPM_STAMP}"
+        WORKING_DIRECTORY "${NSPEAKER_DESKTOP_DIR}"
+        DEPENDS "${NSPEAKER_DESKTOP_DIR}/package-lock.json"
+        COMMENT "Installing desktop app npm dependencies..."
+    )
+
+    # -- Step 2: npx tauri build --------------------------------------------
+    add_custom_target(desktop_app
+        COMMAND "${CMAKE_COMMAND}" -E env "NSPEAKER_HOSTD_PATH=$<TARGET_FILE:hostd>"
+                "${NSPEAKER_NPX}" tauri build
+        WORKING_DIRECTORY "${NSPEAKER_DESKTOP_DIR}"
+        DEPENDS "${NSPEAKER_NPM_STAMP}"
+        COMMENT "Building Tauri desktop application..."
+    )
+
+    # hostd must be built before desktop_app
+    add_dependencies(desktop_app hostd)
+endif()
