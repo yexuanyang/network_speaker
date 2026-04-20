@@ -297,7 +297,9 @@ jobs:
           cmake --build build --target hostd
 
       - name: Stage hostd sidecar
-        run: cp build/hostd apps/desktop/src-tauri/binaries/hostd-x86_64-unknown-linux-gnu
+        run: |
+          mkdir -p apps/desktop/src-tauri/binaries
+          cp build/hostd apps/desktop/src-tauri/binaries/hostd-x86_64-unknown-linux-gnu
 
       - name: Install frontend dependencies
         working-directory: apps/desktop
@@ -382,6 +384,7 @@ jobs:
       - name: Stage hostd sidecar
         shell: pwsh
         run: |
+          New-Item -Path "apps\desktop\src-tauri\binaries" -ItemType Directory -Force
           Copy-Item "build\hostd.exe" "apps\desktop\src-tauri\binaries\hostd-x86_64-pc-windows-msvc.exe" -Force
 
       - name: Install frontend dependencies
