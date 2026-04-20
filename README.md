@@ -164,10 +164,30 @@ npx tauri dev
 
 #### 生产构建
 
+**方式一：CMake 统一构建**（推荐）
+
+从项目根目录执行，CMake 会自动先构建 hostd，再构建桌面 GUI：
+
 ```bash
+# Linux
+cmake --preset linux-desktop
+cmake --build --preset linux-desktop
+
+# Windows (需要 Visual Studio 开发者命令行 + vcpkg)
+cmake --preset windows-desktop
+cmake --build --preset windows-desktop
+```
+
+**方式二：手动分步构建**
+
+先构建 C++ 组件（hostd），再构建 Tauri 应用：
+
+```bash
+# 1. 构建 hostd（参考上方 C++ 组件构建步骤）
+# 2. 构建桌面 GUI
 cd apps/desktop
 npm install
-npx tauri build          # 构建二进制及安装包 (.deb, .rpm, .AppImage / .msi)
+npx tauri build
 ```
 
 > Linux 上如果 AppImage 打包时 `strip` 报 `.relr.dyn` 错误（常见于 Fedora 43+ 等新版发行版），加上 `NO_STRIP=true`：
