@@ -390,10 +390,14 @@ jobs:
           Copy-Item "apps\desktop\src-tauri\target\release\network-speaker-desktop.exe" "$archiveDir\"
           Copy-Item "out\build\windows-ninja-vcpkg\hostd.exe" "$archiveDir\"
           # Include MSI installer if built by Tauri
-          Get-ChildItem -Recurse -Path "apps\desktop\src-tauri\target\release\bundle\msi" -Filter "*.msi" |
-            Copy-Item -Destination . -ErrorAction SilentlyContinue
-          Get-ChildItem -Recurse -Path "apps\desktop\src-tauri\target\release\bundle\nsis" -Filter "*.exe" |
-            Copy-Item -Destination . -ErrorAction SilentlyContinue
+          if (Test-Path "apps\desktop\src-tauri\target\release\bundle\msi") {
+            Get-ChildItem -Recurse -Path "apps\desktop\src-tauri\target\release\bundle\msi" -Filter "*.msi" |
+              Copy-Item -Destination .
+          }
+          if (Test-Path "apps\desktop\src-tauri\target\release\bundle\nsis") {
+            Get-ChildItem -Recurse -Path "apps\desktop\src-tauri\target\release\bundle\nsis" -Filter "*.exe" |
+              Copy-Item -Destination .
+          }
           Compress-Archive -Path "$archiveDir\*" -DestinationPath "$archiveDir.zip"
 
       - name: Upload artifact
