@@ -5,84 +5,166 @@
     "minor": 31,
     "patch": 0
   },
+
   "configurePresets": [
     {
-      "name": "windows-ninja-vcpkg",
-      "displayName": "Windows Ninja (vcpkg, tests on)",
+      "name": "base",
+      "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "BUILD_TESTING": "ON",
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
     {
-      "name": "linux-ninja-system",
-      "displayName": "Linux Ninja (system packages, tests on)",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "name": "base-linux",
+      "hidden": true,
+      "inherits": "base",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Linux"
-      },
+      }
+    },
+    {
+      "name": "base-windows",
+      "hidden": true,
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "flags-vcpkg",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "flags-debug-tests",
+      "hidden": true,
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "BUILD_TESTING": "ON"
       }
     },
     {
-      "name": "windows-desktop",
-      "displayName": "Windows Desktop App (vcpkg, GUI)",
-      "inherits": "windows-ninja-vcpkg",
+      "name": "flags-release-tests",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "flags-release-notests",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "OFF"
+      }
+    },
+    {
+      "name": "flags-desktop-gui",
+      "hidden": true,
       "cacheVariables": {
         "NSPEAKER_BUILD_DESKTOP_GUI": "ON"
       }
     },
     {
-      "name": "linux-desktop",
-      "displayName": "Linux Desktop App (system packages, GUI)",
-      "inherits": "linux-ninja-system",
-      "cacheVariables": {
-        "NSPEAKER_BUILD_DESKTOP_GUI": "ON"
-      }
-    }
-  ],
-  "buildPresets": [
+      "name": "binary-dir-ci",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build"
+    },
+
     {
       "name": "windows-ninja-vcpkg",
-      "configurePreset": "windows-ninja-vcpkg"
+      "displayName": "Windows Ninja (vcpkg, Debug, tests on)",
+      "inherits": ["flags-debug-tests", "flags-vcpkg", "base-windows"]
     },
     {
       "name": "linux-ninja-system",
-      "configurePreset": "linux-ninja-system"
+      "displayName": "Linux Ninja (system packages, Debug, tests on)",
+      "inherits": ["flags-debug-tests", "base-linux"]
     },
     {
       "name": "windows-desktop",
-      "configurePreset": "windows-desktop",
-      "targets": ["desktop_app"]
+      "displayName": "Windows Desktop App (vcpkg, Debug, GUI)",
+      "inherits": ["flags-desktop-gui", "windows-ninja-vcpkg"]
     },
     {
       "name": "linux-desktop",
-      "configurePreset": "linux-desktop",
-      "targets": ["desktop_app"]
+      "displayName": "Linux Desktop App (system packages, Debug, GUI)",
+      "inherits": ["flags-desktop-gui", "linux-ninja-system"]
+    },
+
+    {
+      "name": "windows-ninja-vcpkg-release",
+      "displayName": "Windows Ninja (vcpkg, Release, tests on)",
+      "inherits": ["flags-release-tests", "flags-vcpkg", "base-windows"]
+    },
+    {
+      "name": "linux-ninja-system-release",
+      "displayName": "Linux Ninja (system packages, Release, tests on)",
+      "inherits": ["flags-release-tests", "base-linux"]
+    },
+    {
+      "name": "windows-desktop-release",
+      "displayName": "Windows Desktop App (vcpkg, Release, GUI)",
+      "inherits": ["flags-desktop-gui", "windows-ninja-vcpkg-release"]
+    },
+    {
+      "name": "linux-desktop-release",
+      "displayName": "Linux Desktop App (system packages, Release, GUI)",
+      "inherits": ["flags-desktop-gui", "linux-ninja-system-release"]
+    },
+
+    {
+      "name": "ci-linux",
+      "displayName": "CI: Linux (Release, tests on, build/)",
+      "inherits": ["binary-dir-ci", "flags-release-tests", "base-linux"]
+    },
+    {
+      "name": "ci-linux-hostd-only",
+      "displayName": "CI: Linux hostd sidecar only (Release, no tests, build/)",
+      "inherits": ["binary-dir-ci", "flags-release-notests", "base-linux"]
+    },
+    {
+      "name": "ci-windows-hostd-only",
+      "displayName": "CI: Windows hostd sidecar only (Release, no tests, bundled Opus, build/)",
+      "inherits": ["binary-dir-ci", "flags-release-notests", "base-windows"]
     }
   ],
+
+  "buildPresets": [
+    { "name": "windows-ninja-vcpkg",         "configurePreset": "windows-ninja-vcpkg" },
+    { "name": "linux-ninja-system",          "configurePreset": "linux-ninja-system" },
+    { "name": "windows-desktop",             "configurePreset": "windows-desktop",  "targets": ["desktop_app"] },
+    { "name": "linux-desktop",               "configurePreset": "linux-desktop",    "targets": ["desktop_app"] },
+
+    { "name": "windows-ninja-vcpkg-release", "configurePreset": "windows-ninja-vcpkg-release" },
+    { "name": "linux-ninja-system-release",  "configurePreset": "linux-ninja-system-release" },
+    { "name": "windows-desktop-release",     "configurePreset": "windows-desktop-release", "targets": ["desktop_app"] },
+    { "name": "linux-desktop-release",       "configurePreset": "linux-desktop-release",   "targets": ["desktop_app"] },
+
+    { "name": "ci-linux",                    "configurePreset": "ci-linux" },
+    { "name": "ci-linux-hostd-only",         "configurePreset": "ci-linux-hostd-only",   "targets": ["hostd"] },
+    { "name": "ci-windows-hostd-only",       "configurePreset": "ci-windows-hostd-only", "targets": ["hostd"] }
+  ],
+
   "testPresets": [
     {
-      "name": "windows-ninja-vcpkg",
-      "configurePreset": "windows-ninja-vcpkg",
-      "output": {
-        "outputOnFailure": true
-      }
+      "name": "test-base",
+      "hidden": true,
+      "output": { "outputOnFailure": true }
     },
-    {
-      "name": "linux-ninja-system",
-      "configurePreset": "linux-ninja-system",
-      "output": {
-        "outputOnFailure": true
-      }
-    }
+    { "name": "windows-ninja-vcpkg",         "inherits": "test-base", "configurePreset": "windows-ninja-vcpkg" },
+    { "name": "linux-ninja-system",          "inherits": "test-base", "configurePreset": "linux-ninja-system" },
+    { "name": "windows-ninja-vcpkg-release", "inherits": "test-base", "configurePreset": "windows-ninja-vcpkg-release" },
+    { "name": "linux-ninja-system-release",  "inherits": "test-base", "configurePreset": "linux-ninja-system-release" },
+    { "name": "ci-linux",                    "inherits": "test-base", "configurePreset": "ci-linux" }
   ]
 }
