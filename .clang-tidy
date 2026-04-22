@@ -1,0 +1,52 @@
+---
+Checks: >
+  bugprone-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -modernize-use-trailing-return-type,
+  -readability-named-parameter,
+  -readability-implicit-bool-conversion,
+  -readability-braces-around-statements,
+  -readability-identifier-naming,
+  -readability-magic-numbers,
+  -readability-identifier-length,
+  -modernize-raw-string-literal,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-avoid-c-arrays,
+  -modernize-avoid-c-arrays,
+  -bugprone-unchecked-optional-access,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -modernize-use-using,
+  -readability-redundant-member-init,
+  -readability-math-missing-parentheses,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape,
+  -portability-avoid-pragma-once
+
+CheckOptions:
+  - key:   cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
+    value: 1
+  - key:   cppcoreguidelines-special-member-functions.AllowMissingMoveFunctionsWhenCopyIsDeleted
+    value: 1
+  - key:   modernize-loop-convert.MinConfidence
+    value: reasonable
+  - key:   modernize-pass-by-value.IncludeStyle
+    value: llvm
+  - key:   modernize-replace-auto-ptr.IncludeStyle
+    value: llvm
+  - key:   modernize-use-nullptr.NullMacros
+    value: 'NULL'
+  - key:   readability-function-cognitive-complexity.Threshold
+    value: 80
+
+HeaderFilterRegex: 'nspeaker/.*'
+FormatStyle: file

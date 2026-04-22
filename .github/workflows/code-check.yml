@@ -1,0 +1,130 @@
+name: code-check
+
+on:
+  pull_request:
+    branches: [main, staging, master]
+  push:
+    branches: [main, staging, master]
+  workflow_dispatch:
+
+jobs:
+  cpp-check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format clang-tidy cmake ninja-build pkg-config \
+            libopus-dev libpulse-dev libgtest-dev
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_CXX_SCAN_FOR_MODULES=OFF
+
+      - name: Check C++ formatting
+        run: |
+          find libs server client tests -type f \( -name '*.cpp' -o -name '*.h' \) -print0 | \
+            xargs -0 clang-format --dry-run --Werror
+
+      - name: C++ static analysis (clang-tidy)
+        run: |
+          jq -r '.[].file' build/compile_commands.json | \
+            grep -E '\.(cpp|c)$' | sort -u | \
+            xargs -P$(nproc) -I{} clang-tidy {} -p build --quiet
+        # Note: Windows-only translation units (e.g. WASAPI) are not compiled
+        # on Linux and therefore are not analyzed by clang-tidy in this job.
+
+  rust-check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check Rust formatting
+        working-directory: apps/desktop/src-tauri
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        working-directory: apps/desktop/src-tauri
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Type-check and build
+        working-directory: apps/desktop
+        run: npm run build
+
+  dotnet-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Check .NET formatting
+        run: |
+          dotnet format --verify-no-changes \
+            apps/windows-launcher/NetworkSpeaker.Launcher/NetworkSpeaker.Launcher.csproj
+          dotnet format --verify-no-changes \
+            apps/windows-launcher/NetworkSpeaker.Launcher.Core/NetworkSpeaker.Launcher.Core.csproj
+          dotnet format --verify-no-changes \
+            apps/windows-launcher/NetworkSpeaker.Launcher.Core.Tests/NetworkSpeaker.Launcher.Core.Tests.csproj
+
+  android-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: sdkmanager --install "ndk;27.1.12297006"
+
+      - name: Run lint
+        working-directory: client/android-app
+        run: |
+          chmod +x gradlew
+          ./gradlew lint --no-daemon
