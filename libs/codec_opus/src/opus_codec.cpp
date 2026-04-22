@@ -42,17 +42,16 @@ OpusEncoder::~OpusEncoder() {
 
 bool OpusEncoder::Encode(const audio::PcmFrame& pcm, std::vector<std::uint8_t>& opus) {
     if (!ok() || pcm.format.sample_rate != audio::kDefaultSampleRate ||
-        pcm.format.channels != audio::kDefaultChannels ||
-        pcm.samples_per_channel == 0 ||
+        pcm.format.channels != audio::kDefaultChannels || pcm.samples_per_channel == 0 ||
         pcm.interleaved.size() <
             static_cast<std::size_t>(pcm.samples_per_channel * audio::kDefaultChannels)) {
         return false;
     }
 
     opus.resize(1500);
-    const auto packet_size = opus_encode_float(
-        impl_->handle, pcm.interleaved.data(), static_cast<int>(pcm.samples_per_channel),
-        opus.data(), static_cast<opus_int32>(opus.size()));
+    const auto packet_size = opus_encode_float(impl_->handle, pcm.interleaved.data(),
+                                               static_cast<int>(pcm.samples_per_channel),
+                                               opus.data(), static_cast<opus_int32>(opus.size()));
     if (packet_size < 0) {
         return false;
     }
@@ -87,9 +86,9 @@ bool OpusDecoder::Decode(std::span<const std::uint8_t> opus, std::uint16_t frame
     pcm.samples_per_channel = frame_samples;
     pcm.interleaved.resize(static_cast<std::size_t>(frame_samples * audio::kDefaultChannels));
 
-    const auto decoded = opus_decode_float(
-        impl_->handle, opus.data(), static_cast<opus_int32>(opus.size()), pcm.interleaved.data(),
-        frame_samples, 0);
+    const auto decoded =
+        opus_decode_float(impl_->handle, opus.data(), static_cast<opus_int32>(opus.size()),
+                          pcm.interleaved.data(), frame_samples, 0);
     return decoded == frame_samples;
 }
 

@@ -25,7 +25,8 @@ bool SineWaveCapture::ReadFrame(audio::PcmFrame& out) {
         const auto sample = static_cast<float>(std::sin(phase_) * amplitude);
         out.interleaved[2 * i] = sample;
         out.interleaved[2 * i + 1] = sample;
-        phase_ += std::numbers::pi * 2.0 * frequency_hz_ / static_cast<double>(out.format.sample_rate);
+        phase_ +=
+            std::numbers::pi * 2.0 * frequency_hz_ / static_cast<double>(out.format.sample_rate);
         if (phase_ > std::numbers::pi * 2.0) {
             phase_ -= std::numbers::pi * 2.0;
         }

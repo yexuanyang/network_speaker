@@ -8,45 +8,40 @@ namespace nspeaker::client {
 // ── Constructors ─────────────────────────────────────────────────────────────
 
 PlayerPipeline::PlayerPipeline(std::unique_ptr<codec::IAudioDecoder> decoder,
-                               std::shared_ptr<audio::IAudioSink>    sink,
-                               std::shared_ptr<audio::Clock>         clock,
-                               PipelineConfig                        config)
-    : decoder_(std::move(decoder)),
-      sink_(std::move(sink)),
-      clock_(std::move(clock)),
-      jitter_(config.steady_target_packets),
-      config_(config),
+                               std::shared_ptr<audio::IAudioSink> sink,
+                               std::shared_ptr<audio::Clock> clock, PipelineConfig config)
+    : decoder_(std::move(decoder)), sink_(std::move(sink)), clock_(std::move(clock)),
+      jitter_(config.steady_target_packets), config_(config),
       effective_target_(config.steady_target_packets) {}
 
 // Legacy constructor — disables FastLock to preserve pre-optimization behaviour.
 PlayerPipeline::PlayerPipeline(std::unique_ptr<codec::IAudioDecoder> decoder,
-                               std::shared_ptr<audio::IAudioSink>    sink,
-                               std::shared_ptr<audio::Clock>         clock,
-                               std::size_t                           target_packets)
+                               std::shared_ptr<audio::IAudioSink> sink,
+                               std::shared_ptr<audio::Clock> clock, std::size_t target_packets)
     : PlayerPipeline(std::move(decoder), std::move(sink), std::move(clock),
                      PipelineConfig{
-                         .startup_fast_lock_enabled   = false,
-                         .steady_target_packets       = target_packets,
-                         .late_frame_drop_threshold_ms = 0,   // no soft catch-up
-                         .stale_packet_threshold_ms    = 0,   // no stale drop
+                         .startup_fast_lock_enabled = false,
+                         .steady_target_packets = target_packets,
+                         .late_frame_drop_threshold_ms = 0,  // no soft catch-up
+                         .stale_packet_threshold_ms = 0,     // no stale drop
                      }) {}
 
 // ── Private ───────────────────────────────────────────────────────────────────
 
 void PlayerPipeline::ResetForStream(std::uint32_t stream_id, std::uint32_t sequence) {
-    current_stream_id_       = stream_id;
-    expected_sequence_       = sequence;
-    primed_                  = false;
-    has_stream_              = true;
-    state_                   = PipelineState::FastLock;
-    steady_consecutive_      = 0;
-    effective_target_        = config_.steady_target_packets;
-    has_first_arrival_       = false;
-    last_arrival_us_         = 0;
-    arrival_idx_             = 0;
-    arrival_count_           = 0;
-    arrival_intervals_       = {};
-    low_variance_start_us_   = 0;
+    current_stream_id_ = stream_id;
+    expected_sequence_ = sequence;
+    primed_ = false;
+    has_stream_ = true;
+    state_ = PipelineState::FastLock;
+    steady_consecutive_ = 0;
+    effective_target_ = config_.steady_target_packets;
+    has_first_arrival_ = false;
+    last_arrival_us_ = 0;
+    arrival_idx_ = 0;
+    arrival_count_ = 0;
+    arrival_intervals_ = {};
+    low_variance_start_us_ = 0;
     last_target_increase_us_ = 0;
     stats_.jitter_variance_us = 0;
     jitter_.Reset();
@@ -83,7 +78,7 @@ bool PlayerPipeline::PushPacket(transport::AudioPacket packet) {
         if (arrival_count_ < kVarianceWindowSize) ++arrival_count_;
     }
     has_first_arrival_ = true;
-    last_arrival_us_   = now_us;
+    last_arrival_us_ = now_us;
 
     if (arrival_count_ >= 2) {
         std::uint64_t sum = 0;
@@ -111,8 +106,10 @@ std::size_t PlayerPipeline::DrainReady() {
         if (config_.startup_fast_lock_enabled && state_ == PipelineState::FastLock &&
             jitter_.Size() >= config_.startup_buffer_packets) {
             // FastLock: jump expected_sequence forward so we start near the newest audio.
-            if (const auto newest = jitter_.NewestSequence(); newest.has_value() &&
-                *newest > expected_sequence_ + static_cast<std::uint32_t>(config_.startup_lead_packets)) {
+            if (const auto newest = jitter_.NewestSequence();
+                newest.has_value() &&
+                *newest >
+                    expected_sequence_ + static_cast<std::uint32_t>(config_.startup_lead_packets)) {
                 const auto jump_target =
                     *newest - static_cast<std::uint32_t>(config_.startup_lead_packets);
                 stats_.startup_skipped_packets +=
@@ -133,7 +130,7 @@ std::size_t PlayerPipeline::DrainReady() {
     // Adaptive buffer target adjustment (Steady state only).
     // kHighVarianceUs corresponds to ~5 ms stddev; kLowVarianceUs to ~1 ms stddev.
     static constexpr std::uint32_t kHighVarianceUs = 25'000'000U;
-    static constexpr std::uint32_t kLowVarianceUs  =  1'000'000U;
+    static constexpr std::uint32_t kLowVarianceUs = 1'000'000U;
 
     if (state_ == PipelineState::Steady && arrival_count_ >= 2) {
         const auto adapt_now_us = clock_->NowMicros();
@@ -144,7 +141,7 @@ std::size_t PlayerPipeline::DrainReady() {
                 adapt_now_us - last_target_increase_us_ > 1'000'000ULL) {
                 ++effective_target_;
                 last_target_increase_us_ = adapt_now_us;
-                low_variance_start_us_   = 0;
+                low_variance_start_us_ = 0;
             }
         } else if (stats_.jitter_variance_us < kLowVarianceUs) {
             // Track how long variance has been low; shrink target after 10 s.
@@ -167,8 +164,7 @@ std::size_t PlayerPipeline::DrainReady() {
         // Soft catch-up (Steady state only): discard a buffered frame when latency has
         // grown above the threshold.  Limited to max_catchup_per_drain frames per call to
         // avoid jarring audio gaps.
-        if (state_ == PipelineState::Steady &&
-            config_.late_frame_drop_threshold_ms > 0 &&
+        if (state_ == PipelineState::Steady && config_.late_frame_drop_threshold_ms > 0 &&
             stats_.e2e_latency_ms > config_.late_frame_drop_threshold_ms &&
             catchup_this_drain < config_.max_catchup_per_drain) {
             if (jitter_.PopNext(expected_sequence_).has_value()) {

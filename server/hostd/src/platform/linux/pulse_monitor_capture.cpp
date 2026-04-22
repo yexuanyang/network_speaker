@@ -71,7 +71,8 @@ void OnStreamReadable(pa_stream* /*stream*/, std::size_t /*nbytes*/, void* userd
 }  // namespace
 #endif
 
-PulseMonitorCapture::PulseMonitorCapture(std::string source_name, std::shared_ptr<audio::Clock> clock)
+PulseMonitorCapture::PulseMonitorCapture(std::string source_name,
+                                         std::shared_ptr<audio::Clock> clock)
     : source_name_(std::move(source_name)), clock_(std::move(clock)) {}
 
 PulseMonitorCapture::~PulseMonitorCapture() {

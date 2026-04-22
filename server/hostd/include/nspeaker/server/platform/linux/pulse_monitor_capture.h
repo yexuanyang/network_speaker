@@ -16,8 +16,9 @@ namespace nspeaker::server {
 
 class PulseMonitorCapture final : public audio::IAudioCapture {
 public:
-    explicit PulseMonitorCapture(std::string source_name,
-                                 std::shared_ptr<audio::Clock> clock = std::make_shared<audio::SteadyClock>());
+    explicit PulseMonitorCapture(
+        std::string source_name,
+        std::shared_ptr<audio::Clock> clock = std::make_shared<audio::SteadyClock>());
     ~PulseMonitorCapture() override;
 
     bool Start() override;

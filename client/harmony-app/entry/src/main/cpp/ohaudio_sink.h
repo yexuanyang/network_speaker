@@ -52,8 +52,8 @@ public:
     bool SubmitPcm(const audio::PcmFrame& frame) override;
 
 private:
-    static int32_t WriteCallback(OH_AudioRenderer* renderer, void* user_data,
-                                 void* buffer, int32_t length);
+    static int32_t WriteCallback(OH_AudioRenderer* renderer, void* user_data, void* buffer,
+                                 int32_t length);
 
     OH_AudioStreamBuilder* builder_ = nullptr;
     OH_AudioRenderer* renderer_ = nullptr;

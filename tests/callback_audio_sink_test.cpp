@@ -4,11 +4,10 @@
 
 TEST(CallbackAudioSinkTest, InvokesProvidedCallback) {
     bool called = false;
-    nspeaker::client::CallbackAudioSink sink(
-        [&called](const nspeaker::audio::PcmFrame& frame) {
-            called = true;
-            return frame.samples_per_channel == 480;
-        });
+    nspeaker::client::CallbackAudioSink sink([&called](const nspeaker::audio::PcmFrame& frame) {
+        called = true;
+        return frame.samples_per_channel == 480;
+    });
 
     nspeaker::audio::PcmFrame frame;
     frame.samples_per_channel = 480;

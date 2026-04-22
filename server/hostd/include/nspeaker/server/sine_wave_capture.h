@@ -10,8 +10,8 @@ namespace nspeaker::server {
 
 class SineWaveCapture final : public audio::IAudioCapture {
 public:
-    explicit SineWaveCapture(double frequency_hz,
-                             std::shared_ptr<audio::Clock> clock = std::make_shared<audio::SteadyClock>());
+    explicit SineWaveCapture(double frequency_hz, std::shared_ptr<audio::Clock> clock =
+                                                      std::make_shared<audio::SteadyClock>());
 
     bool Start() override;
     bool ReadFrame(audio::PcmFrame& out) override;

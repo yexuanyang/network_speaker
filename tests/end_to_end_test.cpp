@@ -24,13 +24,9 @@ public:
 
 class ManualClock final : public nspeaker::audio::Clock {
 public:
-    [[nodiscard]] std::uint64_t NowMicros() const noexcept override {
-        return now_us_;
-    }
+    [[nodiscard]] std::uint64_t NowMicros() const noexcept override { return now_us_; }
 
-    void SetMicros(std::uint64_t now_us) noexcept {
-        now_us_ = now_us;
-    }
+    void SetMicros(std::uint64_t now_us) noexcept { now_us_ = now_us; }
 
 private:
     std::uint64_t now_us_ = 0;
@@ -45,15 +41,12 @@ public:
         return true;
     }
 
-    bool Reset() override {
-        return true;
-    }
+    bool Reset() override { return true; }
 };
 
 nspeaker::transport::AudioPacket EncodePacket(nspeaker::server::SineWaveCapture& capture,
                                               nspeaker::codec::OpusEncoder& encoder,
-                                              std::uint32_t stream_id,
-                                              std::uint32_t sequence) {
+                                              std::uint32_t stream_id, std::uint32_t sequence) {
     nspeaker::audio::PcmFrame frame;
     EXPECT_TRUE(capture.ReadFrame(frame));
 
@@ -172,20 +165,19 @@ TEST(EndToEndTest, FastLockJumpsToNewestSequenceOnBacklog) {
 
     auto sink = std::make_shared<MemorySink>();
     nspeaker::client::PipelineConfig config;
-    config.startup_buffer_packets     = 4;
-    config.startup_lead_packets       = 2;
-    config.steady_target_packets      = 3;
+    config.startup_buffer_packets = 4;
+    config.startup_lead_packets = 2;
+    config.steady_target_packets = 3;
     config.steady_consecutive_threshold = 8;
-    config.stale_packet_threshold_ms  = 0;  // disable stale drop for this test
+    config.stale_packet_threshold_ms = 0;  // disable stale drop for this test
     nspeaker::client::PlayerPipeline pipeline(
-        std::move(decoder), sink,
-        std::make_shared<nspeaker::audio::SteadyClock>(), config);
+        std::move(decoder), sink, std::make_shared<nspeaker::audio::SteadyClock>(), config);
 
     // Push 10 packets without draining — simulates a backlog.
     constexpr std::uint32_t kBacklog = 10;
     for (std::uint32_t seq = 0; seq < kBacklog; ++seq) {
-        const auto wire = nspeaker::transport::SerializePacket(
-            EncodePacket(capture, encoder, 1, seq));
+        const auto wire =
+            nspeaker::transport::SerializePacket(EncodePacket(capture, encoder, 1, seq));
         auto inbound = nspeaker::transport::TryParsePacket(wire);
         ASSERT_TRUE(inbound.has_value());
         pipeline.PushPacket(std::move(*inbound));
@@ -212,12 +204,11 @@ TEST(EndToEndTest, StalePacketDropIsSkippedWhenCaptureTimestampIsZero) {
 
     auto sink = std::make_shared<MemorySink>();
     nspeaker::client::PipelineConfig config;
-    config.startup_fast_lock_enabled  = false;
-    config.steady_target_packets      = 1;
-    config.stale_packet_threshold_ms  = 1;  // 1 ms threshold — any real packet would be dropped
+    config.startup_fast_lock_enabled = false;
+    config.steady_target_packets = 1;
+    config.stale_packet_threshold_ms = 1;  // 1 ms threshold — any real packet would be dropped
     nspeaker::client::PlayerPipeline pipeline(
-        std::move(decoder), sink,
-        std::make_shared<nspeaker::audio::SteadyClock>(), config);
+        std::move(decoder), sink, std::make_shared<nspeaker::audio::SteadyClock>(), config);
 
     // Build a packet with capture_ts_us = 0 (old sender compatibility).
     auto pkt = EncodePacket(capture, encoder, 99, 0);
@@ -242,8 +233,8 @@ TEST(EndToEndTest, TracksArrivalJitterVarianceFromPacketSpacing) {
     config.max_steady_packets = 1;
     config.stale_packet_threshold_ms = 0;
 
-    nspeaker::client::PlayerPipeline pipeline(
-        std::make_unique<PassthroughDecoder>(), sink, clock, config);
+    nspeaker::client::PlayerPipeline pipeline(std::make_unique<PassthroughDecoder>(), sink, clock,
+                                              config);
 
     clock->SetMicros(0);
     EXPECT_TRUE(pipeline.PushPacket(MakeSyntheticPacket(7, 0)));
@@ -272,8 +263,8 @@ TEST(EndToEndTest, ExpandsGapRecoveryBufferAfterJitterSpike) {
     config.stale_packet_threshold_ms = 0;
     config.late_frame_drop_threshold_ms = 0;
 
-    nspeaker::client::PlayerPipeline pipeline(
-        std::make_unique<PassthroughDecoder>(), sink, clock, config);
+    nspeaker::client::PlayerPipeline pipeline(std::make_unique<PassthroughDecoder>(), sink, clock,
+                                              config);
 
     clock->SetMicros(0);
     EXPECT_TRUE(pipeline.PushPacket(MakeSyntheticPacket(8, 0)));
@@ -325,8 +316,8 @@ TEST(EndToEndTest, ShrinksGapRecoveryBufferAfterStableWindow) {
     config.stale_packet_threshold_ms = 0;
     config.late_frame_drop_threshold_ms = 0;
 
-    nspeaker::client::PlayerPipeline pipeline(
-        std::make_unique<PassthroughDecoder>(), sink, clock, config);
+    nspeaker::client::PlayerPipeline pipeline(std::make_unique<PassthroughDecoder>(), sink, clock,
+                                              config);
 
     clock->SetMicros(0);
     EXPECT_TRUE(pipeline.PushPacket(MakeSyntheticPacket(9, 0)));

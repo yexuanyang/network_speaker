@@ -1,8 +1,8 @@
 #pragma once
 
 #include <chrono>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>

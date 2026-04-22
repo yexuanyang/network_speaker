@@ -85,8 +85,9 @@ napi_value NativeStart(napi_env env, napi_callback_info info) {
     if (ok) {
         g_audio_sink->Start();
         g_state.store(1, std::memory_order_release);
-        OH_LOG_INFO(LOG_APP, "NativeStart: Session started on port %{public}d hostFilter=%{public}s",
-                    port, host.empty() ? "<any>" : host.c_str());
+        OH_LOG_INFO(LOG_APP,
+                    "NativeStart: Session started on port %{public}d hostFilter=%{public}s", port,
+                    host.empty() ? "<any>" : host.c_str());
     } else {
         OH_LOG_ERROR(LOG_APP, "NativeStart: Failed to start session on port %{public}d", port);
         g_session.reset();

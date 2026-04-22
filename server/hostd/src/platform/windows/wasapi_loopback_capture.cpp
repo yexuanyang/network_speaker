@@ -23,8 +23,8 @@
 #include <audioclient.h>
 #include <ksmedia.h>
 #include <mmdeviceapi.h>
-#include <wrl/client.h>
 #include <windows.h>
+#include <wrl/client.h>
 #endif
 
 namespace nspeaker::server {
@@ -72,11 +72,7 @@ struct CoTaskMemDeleter {
 
 using WaveFormatPtr = std::unique_ptr<WAVEFORMATEX, CoTaskMemDeleter>;
 
-enum class SampleEncoding {
-    kUnknown,
-    kFloat32,
-    kPcm
-};
+enum class SampleEncoding { kUnknown, kFloat32, kPcm };
 
 bool IsExtensibleFormat(const WAVEFORMATEX& format) {
     return format.wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
@@ -111,8 +107,8 @@ std::wstring Utf8ToWide(const std::string& utf8) {
     if (utf8.empty()) {
         return {};
     }
-    const int len = MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()),
-                                        nullptr, 0);
+    const int len =
+        MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
     if (len <= 0) {
         return {};
     }
@@ -121,14 +117,16 @@ std::wstring Utf8ToWide(const std::string& utf8) {
     return result;
 }
 
-float DecodePcmSample(const std::byte* sample_bytes, int bits_per_sample, int valid_bits_per_sample) {
+float DecodePcmSample(const std::byte* sample_bytes, int bits_per_sample,
+                      int valid_bits_per_sample) {
     if (bits_per_sample <= 0) {
         return 0.0F;
     }
 
     const int effective_bits =
-        (valid_bits_per_sample > 0 && valid_bits_per_sample <= bits_per_sample) ? valid_bits_per_sample
-                                                                                : bits_per_sample;
+        (valid_bits_per_sample > 0 && valid_bits_per_sample <= bits_per_sample)
+            ? valid_bits_per_sample
+            : bits_per_sample;
 
     if (bits_per_sample == 8) {
         const auto raw = static_cast<int>(std::to_integer<unsigned char>(sample_bytes[0]));
@@ -146,9 +144,10 @@ float DecodePcmSample(const std::byte* sample_bytes, int bits_per_sample, int va
     }
 
     if (bits_per_sample == 24) {
-        std::int32_t value = static_cast<std::int32_t>(std::to_integer<unsigned char>(sample_bytes[0])) |
-                             (static_cast<std::int32_t>(std::to_integer<unsigned char>(sample_bytes[1])) << 8) |
-                             (static_cast<std::int32_t>(std::to_integer<unsigned char>(sample_bytes[2])) << 16);
+        std::int32_t value =
+            static_cast<std::int32_t>(std::to_integer<unsigned char>(sample_bytes[0])) |
+            (static_cast<std::int32_t>(std::to_integer<unsigned char>(sample_bytes[1])) << 8) |
+            (static_cast<std::int32_t>(std::to_integer<unsigned char>(sample_bytes[2])) << 16);
         if ((value & 0x00800000) != 0) {
             value |= ~0x00FFFFFF;
         }
@@ -243,7 +242,8 @@ struct WasapiLoopbackCapture::Impl {
         } else if (mix_format->wFormatTag == WAVE_FORMAT_PCM) {
             sample_encoding = SampleEncoding::kPcm;
         } else if (IsExtensibleFormat(*mix_format)) {
-            const auto* extensible = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(mix_format.get());
+            const auto* extensible =
+                reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(mix_format.get());
             input_valid_bits_per_sample = extensible->Samples.wValidBitsPerSample == 0
                                               ? extensible->Format.wBitsPerSample
                                               : extensible->Samples.wValidBitsPerSample;
@@ -255,8 +255,8 @@ struct WasapiLoopbackCapture::Impl {
             }
         }
 
-        return sample_encoding != SampleEncoding::kUnknown && input_sample_rate > 0 && input_channels > 0 &&
-               input_bits_per_sample > 0;
+        return sample_encoding != SampleEncoding::kUnknown && input_sample_rate > 0 &&
+               input_channels > 0 && input_bits_per_sample > 0;
     }
 
     float ReadInputSample(const std::byte* sample_bytes) const {
@@ -267,7 +267,8 @@ struct WasapiLoopbackCapture::Impl {
         }
 
         if (sample_encoding == SampleEncoding::kPcm) {
-            return DecodePcmSample(sample_bytes, input_bits_per_sample, input_valid_bits_per_sample);
+            return DecodePcmSample(sample_bytes, input_bits_per_sample,
+                                   input_valid_bits_per_sample);
         }
 
         return 0.0F;
@@ -297,7 +298,8 @@ struct WasapiLoopbackCapture::Impl {
         double left = 0.0;
         double right = 0.0;
         for (std::uint16_t channel = 0; channel < input_channels; ++channel) {
-            const float sample = ReadInputSample(frame_bytes + static_cast<std::size_t>(channel) * bytes_per_sample);
+            const float sample =
+                ReadInputSample(frame_bytes + static_cast<std::size_t>(channel) * bytes_per_sample);
             switch (ChannelBitForIndex(input_channel_mask, channel)) {
             case SPEAKER_FRONT_LEFT:
             case SPEAKER_TOP_FRONT_LEFT:
@@ -347,7 +349,8 @@ struct WasapiLoopbackCapture::Impl {
     }
 
     void AppendSilenceFrames(std::uint32_t frame_count) {
-        source_stereo.resize(source_stereo.size() + static_cast<std::size_t>(frame_count) * kTargetChannels, 0.0F);
+        source_stereo.resize(
+            source_stereo.size() + static_cast<std::size_t>(frame_count) * kTargetChannels, 0.0F);
     }
 
     void AppendConvertedFrames(const std::byte* data, std::uint32_t frame_count, bool silent) {
@@ -363,7 +366,8 @@ struct WasapiLoopbackCapture::Impl {
         const auto bytes_per_sample = static_cast<std::size_t>((input_bits_per_sample + 7) / 8);
         const auto bytes_per_frame = bytes_per_sample * input_channels;
         const auto* current = data;
-        source_stereo.reserve(source_stereo.size() + static_cast<std::size_t>(frame_count) * kTargetChannels);
+        source_stereo.reserve(source_stereo.size() +
+                              static_cast<std::size_t>(frame_count) * kTargetChannels);
         for (std::uint32_t frame = 0; frame < frame_count; ++frame) {
             const auto stereo = MixFrameToStereo(current);
             source_stereo.push_back(stereo[0]);
@@ -402,7 +406,8 @@ struct WasapiLoopbackCapture::Impl {
 
         const auto safe_drop_frames = std::min(drop_frames, available_frames);
         source_stereo.erase(source_stereo.begin(),
-                            source_stereo.begin() + static_cast<std::ptrdiff_t>(safe_drop_frames * kTargetChannels));
+                            source_stereo.begin() +
+                                static_cast<std::ptrdiff_t>(safe_drop_frames * kTargetChannels));
         source_position -= static_cast<double>(safe_drop_frames);
     }
 
@@ -423,7 +428,8 @@ struct WasapiLoopbackCapture::Impl {
             BYTE* data = nullptr;
             UINT32 captured_frames = 0;
             DWORD flags = 0;
-            if (FAILED(capture_client->GetBuffer(&data, &captured_frames, &flags, nullptr, nullptr))) {
+            if (FAILED(
+                    capture_client->GetBuffer(&data, &captured_frames, &flags, nullptr, nullptr))) {
                 return false;
             }
 
@@ -441,8 +447,7 @@ struct WasapiLoopbackCapture::Impl {
 };
 
 WasapiLoopbackCapture::WasapiLoopbackCapture(std::shared_ptr<audio::Clock> clock,
-                                             WasapiLoopbackRole role,
-                                             std::string device_id)
+                                             WasapiLoopbackRole role, std::string device_id)
     : impl_(std::make_unique<Impl>(std::move(clock), role, std::move(device_id))) {}
 
 WasapiLoopbackCapture::~WasapiLoopbackCapture() {
@@ -479,7 +484,8 @@ bool WasapiLoopbackCapture::Start() {
     } else {
         for (const auto role : CandidateRoles(impl_->role)) {
             device.Reset();
-            if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, role, device.GetAddressOf()))) {
+            if (SUCCEEDED(
+                    enumerator->GetDefaultAudioEndpoint(eRender, role, device.GetAddressOf()))) {
                 found_device = true;
                 break;
             }
@@ -509,13 +515,15 @@ bool WasapiLoopbackCapture::Start() {
     }
 
     impl_->audio_client->GetDevicePeriod(&impl_->device_period, nullptr);
-    if (FAILED(impl_->audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0,
+    if (FAILED(impl_->audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED,
+                                               AUDCLNT_STREAMFLAGS_LOOPBACK, 0, 0,
                                                impl_->mix_format.get(), nullptr))) {
         impl_->Shutdown();
         return false;
     }
 
-    if (FAILED(impl_->audio_client->GetService(IID_PPV_ARGS(impl_->capture_client.GetAddressOf())))) {
+    if (FAILED(
+            impl_->audio_client->GetService(IID_PPV_ARGS(impl_->capture_client.GetAddressOf())))) {
         impl_->Shutdown();
         return false;
     }
@@ -562,9 +570,11 @@ bool WasapiLoopbackCapture::ReadFrame(audio::PcmFrame& out) {
     out.format = {.sample_rate = audio::kDefaultSampleRate, .channels = audio::kDefaultChannels};
     out.samples_per_channel = audio::kDefaultFrameSamples;
     out.capture_ts_us = impl_->clock->NowMicros();
-    out.interleaved.assign(impl_->pending_output.begin(), impl_->pending_output.begin() + kTargetFrameFloats);
+    out.interleaved.assign(impl_->pending_output.begin(),
+                           impl_->pending_output.begin() + kTargetFrameFloats);
     impl_->pending_output.erase(impl_->pending_output.begin(),
-                                impl_->pending_output.begin() + static_cast<std::ptrdiff_t>(kTargetFrameFloats));
+                                impl_->pending_output.begin() +
+                                    static_cast<std::ptrdiff_t>(kTargetFrameFloats));
 
     impl_->next_tick += kFrameDuration;
     std::this_thread::sleep_until(impl_->next_tick);

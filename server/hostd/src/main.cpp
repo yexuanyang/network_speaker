@@ -1,7 +1,7 @@
-#include <csignal>
 #include <chrono>
-#include <cstdlib>
+#include <csignal>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -59,7 +59,8 @@ std::string EscapeJsonString(const std::string& input) {
         default:
             if (static_cast<unsigned char>(ch) < 0x20) {
                 char buf[8];
-                std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned int>(static_cast<unsigned char>(ch)));
+                std::snprintf(buf, sizeof(buf), "\\u%04x",
+                              static_cast<unsigned int>(static_cast<unsigned char>(ch)));
                 result += buf;
             } else {
                 result += ch;
@@ -80,22 +81,20 @@ void PrintDevicesJson(const std::vector<nspeaker::server::AudioDeviceInfo>& devi
         if (i > 0) {
             std::cout << ',';
         }
-        std::cout << "{\"id\":\"" << EscapeJsonString(devices[i].id)
-                  << "\",\"name\":\"" << EscapeJsonString(devices[i].name)
-                  << "\",\"description\":\"" << EscapeJsonString(devices[i].description)
-                  << "\",\"default\":" << (devices[i].is_default ? "true" : "false")
-                  << '}';
+        std::cout << "{\"id\":\"" << EscapeJsonString(devices[i].id) << "\",\"name\":\""
+                  << EscapeJsonString(devices[i].name) << "\",\"description\":\""
+                  << EscapeJsonString(devices[i].description)
+                  << "\",\"default\":" << (devices[i].is_default ? "true" : "false") << '}';
     }
     std::cout << "]\n";
 }
 
 std::uint32_t MakeStreamId() {
-    const auto now_us =
-        std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::system_clock::now().time_since_epoch())
-            .count();
-    const auto mixed = static_cast<std::uint64_t>(now_us) ^
-                       (static_cast<std::uint64_t>(now_us) >> 32U);
+    const auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::system_clock::now().time_since_epoch())
+                            .count();
+    const auto mixed =
+        static_cast<std::uint64_t>(now_us) ^ (static_cast<std::uint64_t>(now_us) >> 32U);
     const auto stream_id = static_cast<std::uint32_t>(mixed & 0xFFFFFFFFU);
     return stream_id == 0 ? 1U : stream_id;
 }
@@ -202,10 +201,11 @@ int main(int argc, char** argv) {
             std::cerr << "UDP send failed\n";
             return EXIT_FAILURE;
         }
-        
+
         ++send_count;
         if (send_count % 100 == 0) {
-            std::cout << "[hostd] Sent " << send_count << " frames to " << host << ':' << port << '\n';
+            std::cout << "[hostd] Sent " << send_count << " frames to " << host << ':' << port
+                      << '\n';
             std::cout.flush();
         }
     }

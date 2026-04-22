@@ -147,8 +147,8 @@ bool OHAudioSink::SubmitPcm(const audio::PcmFrame& frame) {
     return written == total;
 }
 
-int32_t OHAudioSink::WriteCallback(OH_AudioRenderer* renderer, void* user_data,
-                                    void* buffer, int32_t length) {
+int32_t OHAudioSink::WriteCallback(OH_AudioRenderer* renderer, void* user_data, void* buffer,
+                                   int32_t length) {
     auto* self = static_cast<OHAudioSink*>(user_data);
     auto* dst = static_cast<float*>(buffer);
     const size_t sample_count = static_cast<size_t>(length) / sizeof(float);

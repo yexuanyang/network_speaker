@@ -1,5 +1,5 @@
-#include <jni.h>
 #include <android/log.h>
+#include <jni.h>
 
 #include <chrono>
 #include <cstdint>
@@ -10,9 +10,8 @@
 #include "nspeaker/client/callback_audio_sink.h"
 #include "nspeaker/client/client_session.h"
 
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_example_networkspeaker_NativeBridge_nativeStart(JNIEnv* env, jclass clazz,
-                                                         jstring host, jint port);
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_networkspeaker_NativeBridge_nativeStart(
+    JNIEnv* env, jclass clazz, jstring host, jint port);
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_networkspeaker_NativeBridge_nativeStop(JNIEnv* env, jclass clazz);
 
@@ -28,8 +27,7 @@ std::unique_ptr<nspeaker::client::ClientSession> g_session;
 
 bool SubmitToJava(const nspeaker::audio::PcmFrame& frame) {
     if (g_vm == nullptr || g_bridge_class == nullptr || g_on_pcm_ready == nullptr) {
-        __android_log_print(ANDROID_LOG_ERROR, kLogTag,
-                            "SubmitToJava: JNI not initialized");
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag, "SubmitToJava: JNI not initialized");
         return false;
     }
 
@@ -61,8 +59,7 @@ bool SubmitToJava(const nspeaker::audio::PcmFrame& frame) {
                               static_cast<jint>(frame.samples_per_channel));
     const bool ok = !env->ExceptionCheck();
     if (!ok) {
-        __android_log_print(ANDROID_LOG_ERROR, kLogTag,
-                            "SubmitToJava: Java exception occurred");
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag, "SubmitToJava: Java exception occurred");
         env->ExceptionClear();
     }
     env->DeleteLocalRef(array);
@@ -70,7 +67,7 @@ bool SubmitToJava(const nspeaker::audio::PcmFrame& frame) {
     if (attached) {
         g_vm->DetachCurrentThread();
     }
-    
+
     if (ok) {
         static std::atomic<int> submit_count{0};
         const int count = ++submit_count;
@@ -80,7 +77,7 @@ bool SubmitToJava(const nspeaker::audio::PcmFrame& frame) {
                                 static_cast<int>(frame.samples_per_channel), count);
         }
     }
-    
+
     return ok;
 }
 
@@ -92,9 +89,8 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
     return JNI_VERSION_1_6;
 }
 
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_example_networkspeaker_NativeBridge_nativeStart(JNIEnv* env, jclass clazz,
-                                                         jstring host, jint port) {
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_networkspeaker_NativeBridge_nativeStart(
+    JNIEnv* env, jclass clazz, jstring host, jint port) {
     std::scoped_lock lock(g_mutex);
     const char* raw_host = env->GetStringUTFChars(host, nullptr);
     const std::string allowed_sender_ipv4 = raw_host != nullptr ? raw_host : "";
@@ -117,12 +113,13 @@ Java_com_example_networkspeaker_NativeBridge_nativeStart(JNIEnv* env, jclass cla
         nspeaker::client::ClientSession::Config{
             .listen_port = static_cast<std::uint16_t>(port),
             .allowed_sender_ipv4 = allowed_sender_ipv4,
-            .pipeline_config = nspeaker::client::PipelineConfig{
-                .startup_fast_lock_enabled = false,        // Disable FastLock for stable playback
-                .steady_target_packets = 6,                 // Deeper buffer for real devices
-                .stale_packet_threshold_ms = 0,             // No stale drop (reliable on LAN)
-                .late_frame_drop_threshold_ms = 0,          // No soft catch-up
-            },
+            .pipeline_config =
+                nspeaker::client::PipelineConfig{
+                    .startup_fast_lock_enabled = false,  // Disable FastLock for stable playback
+                    .steady_target_packets = 6,          // Deeper buffer for real devices
+                    .stale_packet_threshold_ms = 0,      // No stale drop (reliable on LAN)
+                    .late_frame_drop_threshold_ms = 0,   // No soft catch-up
+                },
             .poll_timeout = std::chrono::milliseconds(20),
         },
         sink);
