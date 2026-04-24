@@ -24,6 +24,7 @@ struct PipelineConfig {
     std::uint32_t stale_packet_threshold_ms = 500;
     std::size_t min_steady_packets = 2;
     std::size_t max_steady_packets = 8;
+    std::size_t max_plc_frames_per_gap = 3;  // max PLC/FEC concealment frames per gap
 };
 
 enum class PipelineState { FastLock, Steady };

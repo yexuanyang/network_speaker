@@ -41,7 +41,25 @@ public:
         return true;
     }
 
+    bool DecodePLC(std::uint16_t frame_samples, nspeaker::audio::PcmFrame& pcm) override {
+        pcm.samples_per_channel = frame_samples;
+        pcm.interleaved.assign(static_cast<std::size_t>(frame_samples) * 2U, 0.0F);
+        ++plc_count;
+        return true;
+    }
+
+    bool DecodeFEC(std::span<const std::uint8_t>, std::uint16_t frame_samples,
+                   nspeaker::audio::PcmFrame& pcm) override {
+        pcm.samples_per_channel = frame_samples;
+        pcm.interleaved.assign(static_cast<std::size_t>(frame_samples) * 2U, 0.0F);
+        ++fec_count;
+        return true;
+    }
+
     bool Reset() override { return true; }
+
+    int plc_count = 0;
+    int fec_count = 0;
 };
 
 nspeaker::transport::AudioPacket EncodePacket(nspeaker::server::SineWaveCapture& capture,
@@ -298,9 +316,10 @@ TEST(EndToEndTest, ExpandsGapRecoveryBufferAfterJitterSpike) {
     clock->SetMicros(210'000);
     EXPECT_TRUE(pipeline.PushPacket(MakeSyntheticPacket(8, 10)));
 
-    EXPECT_EQ(pipeline.DrainReady(), 4U);
+    EXPECT_EQ(pipeline.DrainReady(), 5U);  // 1 PLC for seq 6 + real 7, 8, 9, 10
     EXPECT_EQ(pipeline.expected_sequence(), 11U);
     EXPECT_EQ(pipeline.stats().packets_lost, 1U);
+    EXPECT_EQ(pipeline.stats().plc_concealed, 1U);
 }
 
 TEST(EndToEndTest, ShrinksGapRecoveryBufferAfterStableWindow) {
@@ -348,9 +367,10 @@ TEST(EndToEndTest, ShrinksGapRecoveryBufferAfterStableWindow) {
     clock->SetMicros(42'170'000);
     EXPECT_TRUE(pipeline.PushPacket(MakeSyntheticPacket(9, 48)));
 
-    EXPECT_EQ(pipeline.DrainReady(), 2U);
+    EXPECT_EQ(pipeline.DrainReady(), 3U);  // 1 PLC for seq 46 + real 47, 48
     EXPECT_EQ(pipeline.expected_sequence(), 49U);
     EXPECT_EQ(pipeline.stats().packets_lost, 1U);
+    EXPECT_EQ(pipeline.stats().plc_concealed, 1U);
 }
 
 TEST(EndToEndTest, RecoversAfterSingleLostPacket) {
@@ -372,7 +392,149 @@ TEST(EndToEndTest, RecoversAfterSingleLostPacket) {
     PushRoundTripPacket(pipeline, EncodePacket(capture, encoder, 300, 4));
     PushRoundTripPacket(pipeline, EncodePacket(capture, encoder, 300, 5));
 
-    EXPECT_GE(sink->frames_.size(), 5U);
+    EXPECT_GE(sink->frames_.size(), 6U);  // 0,1,2 + PLC for 3 + 4,5
     EXPECT_EQ(pipeline.expected_sequence(), 6U);
     EXPECT_EQ(pipeline.stats().packets_lost, 1U);
+    EXPECT_EQ(pipeline.stats().plc_concealed, 1U);
+}
+
+TEST(EndToEndTest, PLCGeneratesConcealmentForSingleLostPacket) {
+    // Verify that a single lost packet produces a PLC concealment frame
+    // rather than a hard skip, keeping the audio stream continuous.
+    auto sink = std::make_shared<MemorySink>();
+    auto clock = std::make_shared<ManualClock>();
+    auto decoder = std::make_unique<PassthroughDecoder>();
+    auto* decoder_ptr = decoder.get();
+
+    nspeaker::client::PipelineConfig config;
+    config.startup_fast_lock_enabled = false;
+    config.steady_target_packets = 2;
+    config.min_steady_packets = 2;
+    config.max_steady_packets = 2;
+    config.stale_packet_threshold_ms = 0;
+    config.late_frame_drop_threshold_ms = 0;
+
+    nspeaker::client::PlayerPipeline pipeline(std::move(decoder), sink, clock, config);
+
+    // Push packets 0, 1 — primes the buffer and drains normally.
+    clock->SetMicros(0);
+    pipeline.PushPacket(MakeSyntheticPacket(10, 0));
+    clock->SetMicros(10'000);
+    pipeline.PushPacket(MakeSyntheticPacket(10, 1));
+    EXPECT_EQ(pipeline.DrainReady(), 2U);
+
+    // Skip packet 2, push 3 and 4.
+    clock->SetMicros(30'000);
+    pipeline.PushPacket(MakeSyntheticPacket(10, 3));
+    clock->SetMicros(40'000);
+    pipeline.PushPacket(MakeSyntheticPacket(10, 4));
+
+    // Buffer has {3, 4}, size=2 >= target=2.  Gap at seq 2.
+    // Pipeline should generate PLC for seq 2, then drain 3, 4.
+    EXPECT_EQ(pipeline.DrainReady(), 3U);
+    EXPECT_EQ(pipeline.expected_sequence(), 5U);
+    EXPECT_EQ(pipeline.stats().packets_lost, 1U);
+    EXPECT_EQ(pipeline.stats().plc_concealed, 1U);
+    // FEC should fire because packet 3 was available when seq 2 was missing.
+    EXPECT_EQ(decoder_ptr->fec_count, 1);
+}
+
+TEST(EndToEndTest, PLCLimitsConsecutiveConcealmentFrames) {
+    // When a burst of packets is lost, PLC should generate at most
+    // max_plc_frames_per_gap concealment frames, then hard-skip the rest.
+    auto sink = std::make_shared<MemorySink>();
+    auto clock = std::make_shared<ManualClock>();
+
+    nspeaker::client::PipelineConfig config;
+    config.startup_fast_lock_enabled = false;
+    config.steady_target_packets = 2;
+    config.min_steady_packets = 2;
+    config.max_steady_packets = 2;
+    config.stale_packet_threshold_ms = 0;
+    config.late_frame_drop_threshold_ms = 0;
+    config.max_plc_frames_per_gap = 2;  // only 2 PLC frames allowed
+
+    nspeaker::client::PlayerPipeline pipeline(std::make_unique<PassthroughDecoder>(), sink, clock,
+                                              config);
+
+    // Prime with packets 0, 1.
+    clock->SetMicros(0);
+    pipeline.PushPacket(MakeSyntheticPacket(11, 0));
+    clock->SetMicros(10'000);
+    pipeline.PushPacket(MakeSyntheticPacket(11, 1));
+    EXPECT_EQ(pipeline.DrainReady(), 2U);
+
+    // Lose packets 2, 3, 4, 5, 6 (5-packet burst loss). Push 7, 8.
+    clock->SetMicros(70'000);
+    pipeline.PushPacket(MakeSyntheticPacket(11, 7));
+    clock->SetMicros(80'000);
+    pipeline.PushPacket(MakeSyntheticPacket(11, 8));
+
+    // Buffer has {7, 8}, size=2 >= target=2.  Gap 2..6 = 5 missing.
+    // PLC generates 2 frames (for seq 2, 3), hard-skips 4, 5, 6, then drains 7, 8.
+    const auto drained = pipeline.DrainReady();
+    EXPECT_EQ(drained, 4U);  // 2 PLC + 2 real (7, 8)
+    EXPECT_EQ(pipeline.expected_sequence(), 9U);
+    EXPECT_EQ(pipeline.stats().packets_lost, 5U);
+    EXPECT_EQ(pipeline.stats().plc_concealed, 2U);
+}
+
+TEST(EndToEndTest, JitterBufferPeekDoesNotConsumePacket) {
+    nspeaker::transport::JitterBuffer jitter(2);
+    nspeaker::audio::StreamStats stats;
+
+    nspeaker::transport::AudioPacket pkt;
+    pkt.header.sequence = 5;
+    pkt.payload = {0x01, 0x02};
+    jitter.Push(std::move(pkt), 0, stats);
+
+    // Peek should return a valid pointer without removing the packet.
+    const auto* peeked = jitter.Peek(5);
+    ASSERT_NE(peeked, nullptr);
+    EXPECT_EQ(peeked->header.sequence, 5U);
+    EXPECT_EQ(jitter.Size(), 1U);
+
+    // Peek for non-existent sequence returns nullptr.
+    EXPECT_EQ(jitter.Peek(99), nullptr);
+
+    // PopNext should still find the packet.
+    auto popped = jitter.PopNext(5);
+    ASSERT_TRUE(popped.has_value());
+    EXPECT_EQ(popped->header.sequence, 5U);
+    EXPECT_EQ(jitter.Size(), 0U);
+}
+
+TEST(EndToEndTest, OpusPLCGeneratesNonSilentConcealment) {
+    // Verify that Opus PLC produces a non-trivial concealment frame
+    // after decoding real audio data.
+    nspeaker::server::SineWaveCapture capture(440.0);
+    ASSERT_TRUE(capture.Start());
+
+    nspeaker::codec::OpusEncoder encoder;
+    nspeaker::codec::OpusDecoder decoder;
+    ASSERT_TRUE(encoder.ok());
+    ASSERT_TRUE(decoder.ok());
+
+    // Feed a few real frames to build decoder state.
+    for (int i = 0; i < 5; ++i) {
+        nspeaker::audio::PcmFrame frame;
+        ASSERT_TRUE(capture.ReadFrame(frame));
+        std::vector<std::uint8_t> encoded;
+        ASSERT_TRUE(encoder.Encode(frame, encoded));
+        nspeaker::audio::PcmFrame decoded;
+        ASSERT_TRUE(decoder.Decode(encoded, 480, decoded));
+    }
+
+    // Generate a PLC frame.
+    nspeaker::audio::PcmFrame plc_frame;
+    ASSERT_TRUE(decoder.DecodePLC(480, plc_frame));
+    EXPECT_EQ(plc_frame.samples_per_channel, 480U);
+    EXPECT_EQ(plc_frame.interleaved.size(), 960U);
+
+    // PLC output should not be all zeros (it extrapolates from the sine wave).
+    float energy = 0.0F;
+    for (float sample : plc_frame.interleaved) {
+        energy += sample * sample;
+    }
+    EXPECT_GT(energy, 0.0F);
 }

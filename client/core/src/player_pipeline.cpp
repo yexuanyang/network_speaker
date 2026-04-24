@@ -159,6 +159,7 @@ std::size_t PlayerPipeline::DrainReady() {
 
     std::size_t drained = 0;
     std::size_t catchup_this_drain = 0;
+    std::size_t plc_this_drain = 0;
 
     while (true) {
         // Soft catch-up (Steady state only): discard a buffered frame when latency has
@@ -184,8 +185,49 @@ std::size_t PlayerPipeline::DrainReady() {
             const auto oldest_sequence = jitter_.OldestSequence();
             if (oldest_sequence.has_value() && *oldest_sequence > expected_sequence_) {
                 if (jitter_.Size() >= effective_target_) {
-                    stats_.packets_lost += *oldest_sequence - expected_sequence_;
+                    // PLC-based progressive gap recovery: generate concealment frames
+                    // instead of hard-skipping to avoid audio discontinuity (clicks/pops).
+                    if (plc_this_drain < config_.max_plc_frames_per_gap) {
+                        audio::PcmFrame pcm;
+                        bool concealed = false;
+
+                        // Try FEC first: if the next packet exists, use its embedded
+                        // redundancy data to reconstruct the lost frame.
+                        const auto* next_pkt = jitter_.Peek(expected_sequence_ + 1);
+                        if (next_pkt != nullptr) {
+                            concealed = decoder_->DecodeFEC(
+                                next_pkt->payload, next_pkt->header.frame_samples, pcm);
+                            if (concealed) {
+                                ++stats_.fec_recovered;
+                            }
+                        }
+
+                        // Fall back to pure PLC (decoder extrapolates from internal state).
+                        if (!concealed) {
+                            concealed =
+                                decoder_->DecodePLC(audio::kDefaultFrameSamples, pcm);
+                        }
+
+                        if (concealed) {
+                            ++stats_.plc_concealed;
+                            pcm.capture_ts_us = 0;
+                            sink_->SubmitPcm(pcm);
+                        }
+
+                        ++stats_.packets_lost;
+                        ++expected_sequence_;
+                        ++plc_this_drain;
+                        ++drained;
+                        continue;
+                    }
+
+                    // PLC limit reached — hard-skip remaining gap and reset decoder
+                    // state to avoid stale-state artifacts on the next real frame.
+                    const auto remaining = *oldest_sequence - expected_sequence_;
+                    stats_.packets_lost += remaining;
                     expected_sequence_ = *oldest_sequence;
+                    decoder_->Reset();
+                    plc_this_drain = 0;
                     continue;
                 }
                 // Real gap exists but buffer too shallow to skip yet — true underrun.
@@ -194,6 +236,9 @@ std::size_t PlayerPipeline::DrainReady() {
             // Buffer simply exhausted (no gap) — normal end of buffered data, not an underrun.
             break;
         }
+
+        // Successful pop — reset PLC counter (new gap would get a fresh budget).
+        plc_this_drain = 0;
 
         audio::PcmFrame pcm;
         if (!decoder_->Decode(packet->payload, packet->header.frame_samples, pcm)) {

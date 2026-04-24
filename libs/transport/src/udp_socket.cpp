@@ -247,7 +247,18 @@ bool UdpSocket::EnsureOpen() {
     }
 
     fd_ = static_cast<std::intptr_t>(socket(AF_INET, SOCK_DGRAM, 0));
-    return static_cast<SocketHandle>(fd_) != kInvalidFd;
+    if (static_cast<SocketHandle>(fd_) == kInvalidFd) {
+        return false;
+    }
+
+    // Enlarge the kernel receive buffer to reduce packet drops during jitter bursts.
+    // 512 KB is generous for audio (each packet is ~250 bytes); the OS may cap this
+    // at a lower value depending on sysctl/registry limits, which is acceptable.
+    constexpr int kDesiredRcvBuf = 512 * 1024;
+    setsockopt(static_cast<SocketHandle>(fd_), SOL_SOCKET, SO_RCVBUF,
+               reinterpret_cast<const char*>(&kDesiredRcvBuf), sizeof(kDesiredRcvBuf));
+
+    return true;
 }
 
 }  // namespace nspeaker::transport

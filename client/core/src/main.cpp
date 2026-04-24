@@ -93,6 +93,8 @@ int main(int argc, char** argv) {
                           << "ms peak=" << s.peak_jitter_ms
                           << "ms jitter_var_us=" << s.jitter_variance_us
                           << " lost=" << s.packets_lost
+                          << " plc=" << s.plc_concealed
+                          << " fec=" << s.fec_recovered
                           << " startup_skip=" << s.startup_skipped_packets
                           << " late_drop=" << s.late_dropped << " underrun=" << s.playback_underruns
                           << '\n';

@@ -92,6 +92,38 @@ bool OpusDecoder::Decode(std::span<const std::uint8_t> opus, std::uint16_t frame
     return decoded == frame_samples;
 }
 
+bool OpusDecoder::DecodePLC(std::uint16_t frame_samples, audio::PcmFrame& pcm) {
+    if (!ok() || frame_samples == 0) {
+        return false;
+    }
+
+    pcm.format = {.sample_rate = audio::kDefaultSampleRate, .channels = audio::kDefaultChannels};
+    pcm.samples_per_channel = frame_samples;
+    pcm.interleaved.resize(static_cast<std::size_t>(frame_samples * audio::kDefaultChannels));
+
+    const auto decoded =
+        opus_decode_float(impl_->handle, nullptr, 0, pcm.interleaved.data(), frame_samples, 0);
+    return decoded == frame_samples;
+}
+
+bool OpusDecoder::DecodeFEC(std::span<const std::uint8_t> next_opus, std::uint16_t frame_samples,
+                            audio::PcmFrame& pcm) {
+    if (!ok() || next_opus.empty() || frame_samples == 0) {
+        return false;
+    }
+
+    pcm.format = {.sample_rate = audio::kDefaultSampleRate, .channels = audio::kDefaultChannels};
+    pcm.samples_per_channel = frame_samples;
+    pcm.interleaved.resize(static_cast<std::size_t>(frame_samples * audio::kDefaultChannels));
+
+    // fec=1: attempt to decode the FEC data embedded in next_opus.
+    // For CELT-only streams (RESTRICTED_LOWDELAY) the codec falls back to PLC internally.
+    const auto decoded = opus_decode_float(impl_->handle, next_opus.data(),
+                                           static_cast<opus_int32>(next_opus.size()),
+                                           pcm.interleaved.data(), frame_samples, 1);
+    return decoded == frame_samples;
+}
+
 bool OpusDecoder::Reset() {
     if (!ok()) {
         return false;

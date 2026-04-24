@@ -22,6 +22,15 @@ public:
 
     virtual bool Decode(std::span<const std::uint8_t> opus, std::uint16_t frame_samples,
                         audio::PcmFrame& pcm) = 0;
+
+    /// Generate a concealment frame for a lost packet using decoder internal state.
+    virtual bool DecodePLC(std::uint16_t frame_samples, audio::PcmFrame& pcm) = 0;
+
+    /// Decode the FEC data embedded in the *next* packet to reconstruct the lost frame.
+    /// Falls back to PLC when no FEC data is present (e.g. CELT-only mode).
+    virtual bool DecodeFEC(std::span<const std::uint8_t> next_opus, std::uint16_t frame_samples,
+                           audio::PcmFrame& pcm) = 0;
+
     virtual bool Reset() = 0;
 };
 
@@ -51,6 +60,9 @@ public:
 
     [[nodiscard]] bool Decode(std::span<const std::uint8_t> opus, std::uint16_t frame_samples,
                               audio::PcmFrame& pcm) override;
+    [[nodiscard]] bool DecodePLC(std::uint16_t frame_samples, audio::PcmFrame& pcm) override;
+    [[nodiscard]] bool DecodeFEC(std::span<const std::uint8_t> next_opus,
+                                 std::uint16_t frame_samples, audio::PcmFrame& pcm) override;
     [[nodiscard]] bool Reset() override;
     [[nodiscard]] bool ok() const noexcept;
 
