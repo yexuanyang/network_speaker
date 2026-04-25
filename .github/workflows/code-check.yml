@@ -62,6 +62,12 @@ jobs:
         working-directory: apps/desktop/src-tauri
         run: cargo fmt --check
 
+      # Tauri's generate_context!() proc-macro validates frontendDist at compile
+      # time.  The real frontend build is covered by the frontend-check job; we
+      # only need a minimal stub here so that cargo clippy can compile the code.
+      - name: Create stub frontend for Clippy
+        run: mkdir -p apps/desktop/dist && echo '<!DOCTYPE html><html></html>' > apps/desktop/dist/index.html
+
       - name: Run Clippy
         working-directory: apps/desktop/src-tauri
         run: cargo clippy --all-targets --all-features -- -D warnings
