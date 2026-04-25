@@ -103,5 +103,25 @@ fn copy_hostd_binary() {
         }
     }
 
-    println!("cargo:warning=Could not find hostd binary for target: {target_triple}");
+    // No real hostd found – create a placeholder so that tauri_build::build()
+    // does not fail on the externalBin resource check.  This is essential for
+    // CI runs (e.g. cargo clippy) that do not build the C++ hostd binary.
+    // The placeholder is overwritten on the next build when a real hostd is
+    // available.  Because binaries/ is listed in .gitignore it will never be
+    // committed accidentally.
+    if let Err(e) = fs::create_dir_all(&binaries_dir) {
+        println!("cargo:warning=Failed to create binaries directory: {e}");
+    } else {
+        match fs::write(&target_binary_path, "placeholder\n") {
+            Ok(_) => {
+                println!(
+                    "cargo:warning=Created placeholder hostd: {}",
+                    target_binary_path.display()
+                );
+            }
+            Err(e) => {
+                println!("cargo:warning=Failed to create placeholder hostd: {e}");
+            }
+        }
+    }
 }

@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Allow restoring/analyzing Windows-targeted projects on non-Windows OS -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+</Project>
