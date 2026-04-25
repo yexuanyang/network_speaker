@@ -25,15 +25,15 @@ namespace {
 
 // Audio frame parameters.
 constexpr std::uint16_t kFrameSamples = nspeaker::audio::kDefaultFrameSamples;  // 480
-constexpr std::uint8_t  kDummyPayloadByte = 0xAB;
+constexpr std::uint8_t kDummyPayloadByte = 0xAB;
 
 // Timing: 10 ms per frame = 10 000 µs.
 constexpr std::uint64_t kFrameIntervalUs = 10'000;
 
 // RNG seeds for reproducible test patterns.
-constexpr std::uint32_t kDefaultSeed   = 42;
+constexpr std::uint32_t kDefaultSeed = 42;
 constexpr std::uint32_t kSeed20PctLoss = 123;
-constexpr std::uint32_t kSeedCombined  = 77;
+constexpr std::uint32_t kSeedCombined = 77;
 
 // Packet-loss rates.
 constexpr double kLossRate10Pct = 0.10;
@@ -43,16 +43,16 @@ constexpr double kLossRate20Pct = 0.20;
 constexpr double kMinOutputRatio = 0.70;
 
 // Total-packet counts per test category.
-constexpr std::uint32_t kSmallTestPackets  = 100;
+constexpr std::uint32_t kSmallTestPackets = 100;
 constexpr std::uint32_t kMediumTestPackets = 200;
-constexpr std::uint32_t kLargeTestPackets  = 300;
+constexpr std::uint32_t kLargeTestPackets = 300;
 
 // Burst-loss parameters.
-constexpr std::uint32_t kBurstCount  = 3;
+constexpr std::uint32_t kBurstCount = 3;
 constexpr std::uint32_t kBurstLength = 5;
 
 // Jitter deltas (microseconds).
-constexpr std::uint64_t kHighJitterDeltaUs   = 8'000;  // ±8 ms
+constexpr std::uint64_t kHighJitterDeltaUs = 8'000;    // ±8 ms
 constexpr std::uint64_t kMediumJitterDeltaUs = 5'000;  // ±5 ms
 
 // Reorder test: how many packets to deliver in pair-wise swapped order.
@@ -502,8 +502,8 @@ TEST(WeakNetworkTest, ExtremeBurstLoss_ResumesAfterHardSkip) {
     EXPECT_EQ(pipeline.DrainReady(), config.steady_target_packets);
 
     // Lose kExtremeBurstLossLen consecutive packets, then refill.
-    const auto resume_seq = static_cast<std::uint32_t>(config.steady_target_packets) +
-                            kExtremeBurstLossLen;
+    const auto resume_seq =
+        static_cast<std::uint32_t>(config.steady_target_packets) + kExtremeBurstLossLen;
     const auto refill_end = resume_seq + static_cast<std::uint32_t>(config.steady_target_packets);
     for (std::uint32_t i = resume_seq; i < refill_end; ++i) {
         clock->SetMicros(i * kFrameIntervalUs);

@@ -1,9 +1,6 @@
 use crate::models::{CaptureSource, HostdCommand, LaunchConfiguration, WasapiRole};
 
-pub fn build_command(
-    exe_path: &str,
-    config: &LaunchConfiguration,
-) -> Result<HostdCommand, String> {
+pub fn build_command(exe_path: &str, config: &LaunchConfiguration) -> Result<HostdCommand, String> {
     crate::models::validate_config(config)?;
 
     let mut args = Vec::new();

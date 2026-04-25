@@ -18,8 +18,8 @@ struct StreamStats {
     std::uint32_t e2e_latency_ms = 0;
     std::uint32_t startup_skipped_packets = 0;
     std::uint32_t jitter_variance_us = 0;
-    std::uint32_t plc_concealed = 0;   // frames generated via PLC/FEC concealment
-    std::uint32_t fec_recovered = 0;   // frames recovered using FEC from the next packet
+    std::uint32_t plc_concealed = 0;  // frames generated via PLC/FEC concealment
+    std::uint32_t fec_recovered = 0;  // frames recovered using FEC from the next packet
 };
 
 }  // namespace nspeaker::audio

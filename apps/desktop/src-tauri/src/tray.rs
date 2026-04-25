@@ -16,8 +16,7 @@ pub struct TrayMenuState {
 
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_item = MenuItemBuilder::with_id("show", "Show Window").build(app)?;
-    let toggle_item =
-        MenuItemBuilder::with_id("toggle_streaming", "Start Streaming").build(app)?;
+    let toggle_item = MenuItemBuilder::with_id("toggle_streaming", "Start Streaming").build(app)?;
     let quit_item = MenuItemBuilder::with_id("quit", "Exit").build(app)?;
 
     let menu = MenuBuilder::new(app)

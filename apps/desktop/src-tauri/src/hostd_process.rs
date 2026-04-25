@@ -80,12 +80,11 @@ impl HostdProcessManager {
             cmd.creation_flags(CREATE_NO_WINDOW);
         }
 
-        let mut child = cmd.spawn()
-            .map_err(|e| {
-                let msg = format!("Failed to start hostd: {e}");
-                // We'll transition to faulted in the caller
-                msg
-            })?;
+        let mut child = cmd.spawn().map_err(|e| {
+            let msg = format!("Failed to start hostd: {e}");
+            // We'll transition to faulted in the caller
+            msg
+        })?;
 
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
@@ -151,10 +150,7 @@ impl HostdProcessManager {
     pub async fn stop(&self) -> Result<(), String> {
         let kill_tx = {
             let mut inner = self.inner.lock().await;
-            if !matches!(
-                inner.state,
-                ProcessState::Starting | ProcessState::Running
-            ) {
+            if !matches!(inner.state, ProcessState::Starting | ProcessState::Running) {
                 if inner.state != ProcessState::Faulted {
                     inner.state = ProcessState::Stopped;
                     inner.status_text = "Stopped".into();
@@ -201,10 +197,7 @@ impl HostdProcessManager {
             .unwrap_or_else(|| "unknown".into());
 
         let is_error = !was_stop_requested && exit_code != Some(0);
-        self.emit_log(
-            &format!("hostd exited with code {code_str}."),
-            is_error,
-        );
+        self.emit_log(&format!("hostd exited with code {code_str}."), is_error);
 
         if was_stop_requested || exit_code == Some(0) {
             self.transition_to(ProcessState::Stopped, "Stopped").await;

@@ -195,8 +195,8 @@ std::size_t PlayerPipeline::DrainReady() {
                         // redundancy data to reconstruct the lost frame.
                         const auto* next_pkt = jitter_.Peek(expected_sequence_ + 1);
                         if (next_pkt != nullptr) {
-                            concealed = decoder_->DecodeFEC(
-                                next_pkt->payload, next_pkt->header.frame_samples, pcm);
+                            concealed = decoder_->DecodeFEC(next_pkt->payload,
+                                                            next_pkt->header.frame_samples, pcm);
                             if (concealed) {
                                 ++stats_.fec_recovered;
                             }
@@ -204,8 +204,7 @@ std::size_t PlayerPipeline::DrainReady() {
 
                         // Fall back to pure PLC (decoder extrapolates from internal state).
                         if (!concealed) {
-                            concealed =
-                                decoder_->DecodePLC(audio::kDefaultFrameSamples, pcm);
+                            concealed = decoder_->DecodePLC(audio::kDefaultFrameSamples, pcm);
                         }
 
                         if (concealed) {
