@@ -160,7 +160,8 @@ if(BUILD_TESTING AND NOT NSPEAKER_GTEST_TARGET STREQUAL "")
         tests/receiver_test.cpp
         tests/jitter_buffer_test.cpp
         tests/opus_codec_test.cpp
-        tests/end_to_end_test.cpp)
+        tests/end_to_end_test.cpp
+        tests/weak_network_test.cpp)
     target_link_libraries(network_speaker_tests PRIVATE
         client_core
         host_audio
