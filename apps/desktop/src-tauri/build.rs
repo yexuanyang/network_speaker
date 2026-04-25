@@ -20,9 +20,9 @@ fn copy_hostd_binary() {
 
     let binaries_dir = manifest_dir.join("binaries");
     let target_binary_name = if target_triple.contains("windows") {
-        format!("hostd-{}.exe", target_triple)
+        format!("hostd-{target_triple}.exe")
     } else {
-        format!("hostd-{}", target_triple)
+        format!("hostd-{target_triple}")
     };
     let target_binary_path = binaries_dir.join(&target_binary_name);
 
@@ -72,7 +72,7 @@ fn copy_hostd_binary() {
 
             // 确保 binaries 目录存在
             if let Err(e) = fs::create_dir_all(&binaries_dir) {
-                println!("cargo:warning=Failed to create binaries directory: {}", e);
+                println!("cargo:warning=Failed to create binaries directory: {e}");
                 continue;
             }
 
@@ -103,8 +103,5 @@ fn copy_hostd_binary() {
         }
     }
 
-    println!(
-        "cargo:warning=Could not find hostd binary for target: {}",
-        target_triple
-    );
+    println!("cargo:warning=Could not find hostd binary for target: {target_triple}");
 }

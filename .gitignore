@@ -46,3 +46,5 @@ apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/binaries/
 
 CLAUDE.md
+
+arms_cache/

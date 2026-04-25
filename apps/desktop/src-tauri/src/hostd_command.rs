@@ -3,13 +3,12 @@ use crate::models::{CaptureSource, HostdCommand, LaunchConfiguration, WasapiRole
 pub fn build_command(exe_path: &str, config: &LaunchConfiguration) -> Result<HostdCommand, String> {
     crate::models::validate_config(config)?;
 
-    let mut args = Vec::new();
-
-    args.push("--host".into());
-    args.push(config.host.trim().to_string());
-
-    args.push("--port".into());
-    args.push(config.port.to_string());
+    let mut args = vec![
+        "--host".into(),
+        config.host.trim().to_string(),
+        "--port".into(),
+        config.port.to_string(),
+    ];
 
     let source_str = match config.source {
         CaptureSource::Wasapi => "wasapi",
