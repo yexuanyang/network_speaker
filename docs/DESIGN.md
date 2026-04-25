@@ -30,6 +30,8 @@
   - 收包、抖动缓冲、解码、播放回调
 - `client/android-app`
   - Android 生命周期、前台服务、`AudioTrack`
+- `client/harmony-app`
+  - HarmonyOS 原生应用壳与 Receiver Core 桥接
 - `apps/desktop`（Tauri + Vue）
   - 跨平台桌面 GUI、配置持久化、`hostd` 子进程托管
 - `apps/windows-launcher`
@@ -107,6 +109,7 @@ Android 端 sink 路径：
 1. **Opus Inband FEC** — 调用 `DecodeFEC` 从下一个包提取冗余数据重建丢帧；当前编码端使用 `RESTRICTED_LOWDELAY`（CELT-only）模式未启用 inband FEC，故此路径实际退化为 PLC
 2. **PLC（Packet Loss Concealment）** — 由解码器根据内部状态外推生成平滑填充帧，作为主要丢帧恢复手段
 3. **连续 PLC 限制** — 单次丢包间隙最多生成 `max_plc_frames_per_gap` 个 PLC 帧，超出则硬跳避免持续静音
+4. **UDP 接收缓冲区调优** — 通过 `UDP_RECV_BUF_SIZE` 调节 UDP socket 接收缓冲区大小，减少弱网场景下操作系统层面的丢包
 
 当前接收侧恢复点位于：
 
@@ -282,7 +285,7 @@ GitHub Actions Release 流程由 `push` tag `v*` 触发，`staging` 分支 push 
 - 自动发现与配对
 - 握手控制信道
 - 加密
-- Opus inband FEC（需切换到 SILK 混合编码模式，与当前低延迟 CELT-only 模式冲突）
+- Opus inband FEC 全模式支持（当前 `RESTRICTED_LOWDELAY` CELT-only 模式下 PLC 生效，FEC 需切换到 SILK/CELT 混合模式后启用）
 - 多声道
 - 更强的 Android 后台保活
 - 代码签名和 SmartScreen 体验优化

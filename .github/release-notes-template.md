@@ -7,34 +7,41 @@ Stream your desktop audio over LAN to Android devices acting as wireless speaker
 | Platform | File |
 |----------|------|
 | Windows x64 (Desktop App) | `NetworkSpeaker-Desktop-{{VERSION}}-win-x64.zip` |
-| Windows x64 (MSI Installer) | `{{PACKAGE_BASENAME}}.msi` |
-| Linux x64 (Desktop App) | `NetworkSpeaker-Desktop-{{VERSION}}-linux-amd64.tar.gz` |
+| Windows x64 (MSI Installer) | `NetworkSpeaker-{{VERSION}}-win-x64.msi` |
+| Linux x64 (Debian/Ubuntu) | `Network Speaker_{{VERSION}}_amd64.deb` |
+| Linux x64 (Fedora/RHEL) | `Network Speaker-{{VERSION}}.x86_64.rpm` |
+| Linux x64 (AppImage) | `Network Speaker_{{VERSION}}_amd64.AppImage` |
 | Android arm64 | `NetworkSpeaker-{{VERSION}}-android-arm64.apk` |
-| Linux x64 (Ubuntu 22.04, CLI) | `NetworkSpeaker-{{VERSION}}-linux-amd64-ubuntu2204.tar.gz` |
-| Linux x64 (Ubuntu 24.04, CLI) | `NetworkSpeaker-{{VERSION}}-linux-amd64-ubuntu2404.tar.gz` |
-| Linux x64 (RPM, CLI) | `NetworkSpeaker-{{VERSION}}-linux-x86_64.rpm` |
 
-Optionally verify Windows checksum: `{{PACKAGE_BASENAME}}.sha256.txt`
+Optionally verify Windows MSI checksum: `NetworkSpeaker-{{VERSION}}-win-x64.msi.sha256.txt`
 
 ## Install
 
 ### Windows
-1. Run the MSI
+1. Run the MSI installer
 2. Launch `Network Speaker` from the Start Menu
 3. Enter the receiver device IP address and UDP port
 4. Click `Start`
 
+### Linux (Debian/Ubuntu)
+1. Install the deb: `sudo dpkg -i Network\ Speaker_{{VERSION}}_amd64.deb`
+2. Launch from the applications menu or run `network-speaker-desktop`
+3. Enter the receiver device IP address and UDP port, click `Start`
+
+### Linux (Fedora/RHEL)
+1. Install the RPM: `sudo rpm -i "Network Speaker-{{VERSION}}.x86_64.rpm"`
+2. Launch from the applications menu or run `network-speaker-desktop`
+3. Enter the receiver device IP address and UDP port, click `Start`
+
+### Linux (AppImage)
+1. Make executable: `chmod +x "Network Speaker_{{VERSION}}_amd64.AppImage"`
+2. Run: `./Network\ Speaker_{{VERSION}}_amd64.AppImage`
+3. Enter the receiver device IP address and UDP port, click `Start`
+
 ### Android
 1. Install the APK on an Android device (API 29+)
-2. Open the app and enter the sender IP address and port
-
-### Linux (Ubuntu / Debian)
-1. Download and extract the tarball matching your distribution version
-2. Run `./hostd --host <RECEIVER_IP> --port <PORT> --source pulse`
-
-### Linux (Fedora / RHEL)
-1. Install the RPM: `sudo rpm -i NetworkSpeaker-{{VERSION}}-linux-x86_64.rpm`
-2. Run `hostd --host <RECEIVER_IP> --port <PORT> --source pulse`
+2. Open the app and tap "Start Receiving" to begin listening
+3. Send audio from the desktop app targeting the device's IP and port
 
 ## First use
 

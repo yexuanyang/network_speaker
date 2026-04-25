@@ -177,6 +177,33 @@ MSI 使用 WiX Toolset v4。
 - `artifacts/windows-launcher/publish`
 - `artifacts/release`
 
+## 代码检查
+
+CI 通过 `.github/workflows/code-check.yml` 强制执行代码格式和静态分析检查：
+
+**格式检查（clang-format）：**
+
+```bash
+# Linux
+clang-format --dry-run --Werror -style=file \
+  $(find libs/ server/ client/ tests/ -name '*.cpp' -o -name '*.h')
+
+# Windows (PowerShell)
+clang-format --dry-run --Werror -style=file \
+  (Get-ChildItem -Recurse -Include *.cpp,*.h -Path libs,server,client,tests).FullName
+```
+
+**静态分析（clang-tidy）：**
+
+```bash
+# 需要先 cmake configure 生成 compile_commands.json
+cmake --preset linux-ninja-system
+clang-tidy -p out/build/linux-ninja-system \
+  $(find libs/ server/ client/ tests/ -name '*.cpp')
+```
+
+格式规范见仓库根目录的 `.clang-format`（LLVM 风格，4 空格缩进，100 字符列宽，C++20）。
+
 ## GitHub Release
 
 Release workflow：
@@ -258,6 +285,6 @@ adb emu redir add udp:50000:50000
 - 用户说明：`README.md`
 - 开发说明：`docs/CONTRIBUTE.md`
 - 架构设计：`docs/DESIGN.md`
-- 实施计划：`plan-1.md`
-- 阶段进展：`progress.md`
-- 调试记录：`debug.md`
+- 实施计划：`docs/agents/plan-1.md`
+- 阶段进展：`docs/agents/progress.md`
+- 调试记录：`docs/agents/debug.md`

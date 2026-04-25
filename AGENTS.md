@@ -76,6 +76,24 @@ dotnet test .\apps\windows-launcher\NetworkSpeaker.Launcher.Core.Tests\NetworkSp
 .\tools\package-windows-installer.ps1 -Version 0.1.0     # explicit version
 ```
 
+### Code Check (lint & format)
+
+```bash
+# Check formatting (all C++ sources)
+clang-format --dry-run --Werror -style=file $(find . \( -name '*.cpp' -o -name '*.h' \) -not -path './third_party/*' -not -path './build*/*' -not -path './out/*')
+
+# Run clang-tidy (requires compile_commands.json from cmake configure)
+clang-tidy -p out/build/linux-ninja-system $(find libs server/client tests -name '*.cpp')
+```
+
+On Windows (Visual Studio Developer PowerShell):
+
+```powershell
+clang-format --dry-run --Werror -style=file (Get-ChildItem -Recurse -Include *.cpp,*.h -Exclude third_party,out,build*).FullName
+```
+
+These checks are enforced in CI via the `code-check.yml` workflow.
+
 ### Local Loopback Verification
 
 ```powershell
@@ -143,12 +161,20 @@ Two-phase recovery in `player_pipeline.cpp` and `jitter_buffer.cpp`:
 1. New `stream_id` -> reset pipeline immediately.
 2. Same stream gap: if buffer accumulated higher-sequence packets and reached target depth -> skip missing packet, resume playback.
 
+Recovery strategy per lost packet (priority order):
+
+1. **Opus Inband FEC** — decode redundant data from next packet; limited to CELT-only mode (disabled in current `RESTRICTED_LOWDELAY` config)
+2. **PLC (Packet Loss Concealment)** — decoder extrapolates a smooth fill frame from internal state
+3. **Continuous PLC limit** — hard-skip after `max_plc_frames_per_gap` consecutive PLC frames to prevent extended silence
+4. **UDP receive buffer tuning** — configurable `UDP_RECV_BUF_SIZE` reduces OS-level drops under bursty traffic
+
 ## Project Conventions
 
 - **Streaming strategy:** low-latency first -- drop packets during initial connection to lock onto newest audio, then stable in-order playback.
 - **WiX ICE61 warning:** do not suppress -- intentionally deferred until formal release phase.
 - **GoogleTest on Windows:** obtain via vcpkg; do not use FetchContent/downloaded gtest fallback.
-- **MSVC compile flags:** `/utf-8` is enabled project-wide for correct CJK string handling.
+- **MSVC compile flags:** `/utf-8` is enabled project-wide for correct CJK string handling.^M
+- **Code formatting:** LLVM-based clang-format with 4-space indent, 100-char column limit. CI enforces formatting and clang-tidy via `code-check.yml`.^M
 - **GUI does not embed hostd logic** -- it always spawns `hostd.exe` as a subprocess and communicates via stdout/stderr.
 - **Settings persistence:** `%AppData%\NetworkSpeaker\settings.json`. `hostd.exe` path is resolved at runtime (same directory first, then known build directories).
 

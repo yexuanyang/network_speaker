@@ -1,6 +1,8 @@
 # Windows Launcher `.NET 10` Migration Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Note:** File paths in this plan (e.g. `C:\Users\11822\Documents\Code\network_speaker`) are machine-specific examples from the original author's environment. Adapt to your local checkout path when executing.
 
 **Goal:** Move the Windows launcher, packaging, and release pipeline from `.NET 8` to `.NET 10` so local development and CI work against the new minimum Windows GUI baseline.
 
