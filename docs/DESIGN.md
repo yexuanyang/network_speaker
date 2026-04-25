@@ -1,6 +1,6 @@
 # DESIGN
 
-本文档说明 `network_speaker` 当前的系统架构，以及新增的 Windows GUI / MSI / Release 设计。
+本文档说明 `network_speaker` 当前的系统架构、桌面 GUI 设计、以及分发策略。
 
 ## 系统目标
 
@@ -8,7 +8,7 @@
 
 当前主路径是：
 
-- Windows 发送端
+- Windows / Linux 发送端
 - Android 接收端
 - 局域网 UDP 传输
 - Opus 低延迟编码
@@ -20,7 +20,7 @@
 1. 音频采集与播放平台层
 2. 编解码与传输层
 3. 终端应用层
-4. Windows 分发层
+4. 分发层
 
 对应模块：
 
@@ -30,8 +30,10 @@
   - 收包、抖动缓冲、解码、播放回调
 - `client/android-app`
   - Android 生命周期、前台服务、`AudioTrack`
+- `apps/desktop`（Tauri + Vue）
+  - 跨平台桌面 GUI、配置持久化、`hostd` 子进程托管
 - `apps/windows-launcher`
-  - Windows 图形界面、配置持久化、`hostd.exe` 子进程托管
+  - Windows WPF 图形界面（.NET 10）
 - `installer/windows`
   - MSI 安装器
 - `.github/workflows/release.yml`
@@ -98,41 +100,55 @@ Android 端 sink 路径：
 真机比模拟器更容易暴露网络抖动问题，因此接收侧现在采用两段式恢复：
 
 1. 新 `stream_id` 到达时，重置播放流水线
-2. 同一流中如果缺失某个 `expected_sequence`，但缓冲区已经积累了更高序列号且重新达到目标深度，则跳过缺失包并继续播放
+2. 同一流中如果缺失某个 `expected_sequence`，但缓冲区已经积累了更高序列号且重新达到目标深度，则尝试恢复并继续播放
+
+丢帧恢复策略（优先级从高到低）：
+
+1. **Opus Inband FEC** — 调用 `DecodeFEC` 从下一个包提取冗余数据重建丢帧；当前编码端使用 `RESTRICTED_LOWDELAY`（CELT-only）模式未启用 inband FEC，故此路径实际退化为 PLC
+2. **PLC（Packet Loss Concealment）** — 由解码器根据内部状态外推生成平滑填充帧，作为主要丢帧恢复手段
+3. **连续 PLC 限制** — 单次丢包间隙最多生成 `max_plc_frames_per_gap` 个 PLC 帧，超出则硬跳避免持续静音
 
 当前接收侧恢复点位于：
 
 - `client/core/src/player_pipeline.cpp`
 - `libs/transport/src/jitter_buffer.cpp`
 
+统计数据通过 `stream_stats` 的 `plc_concealed` 和 `fec_recovered` 字段追踪。
+
 目标是避免：
 
 - 第一次丢包后永久静音
 - 发送端重启后，客户端继续把新流当旧包丢弃
 
-## Windows GUI 架构
+## 桌面 GUI 架构
 
-首版 Windows GUI 不是重写发送逻辑，而是现有 `hostd.exe` 的图形前端。
+桌面 GUI 是 `hostd` 的图形前端，不嵌入发送逻辑，而是启动 `hostd` 子进程并监控其 stdout/stderr。
 
-当前设计固定为：
+### Tauri 桌面应用（跨平台）
 
-- `NetworkSpeaker.Launcher`
-  - WPF UI
-- `NetworkSpeaker.Launcher.Core`
-  - 参数模型
-  - 命令行构造
-  - 设置持久化
-  - `hostd.exe` 子进程托管
-- `NetworkSpeaker.Launcher.Core.Tests`
-  - GUI 核心逻辑测试
+`apps/desktop` 基于 Tauri v2 + Vue 3，支持 Windows 和 Linux：
 
-GUI 不通过 native IPC 控制发送端，而是：
+- **前端**（Vue 3）
+  - 配置表单、设备枚举、运行状态显示、日志面板
+  - 通过 Tauri IPC 调用后端命令
+- **后端**（Rust）
+  - `hostd_locator` — 运行时定位 `hostd` 二进制
+  - `hostd_command` — 构造命令行参数
+  - `hostd_process` — 子进程生命周期管理
+  - `device_enumerator` — 调用 `hostd --list-devices` 枚举音频设备
+  - `settings` — 配置持久化
+  - `virtual_audio` — 虚拟音频设备检测
+- **构建集成**
+  - `build.rs` 自动从 CMake 构建输出复制 `hostd` 到 `binaries/` 目录
+  - `tauri.conf.json` 通过 `externalBin` 将 `hostd` 声明为 sidecar
+
+GUI 与 `hostd` 的交互方式：
 
 1. 根据表单生成命令行
-2. 启动隐藏的 `hostd.exe`
+2. 启动 `hostd` 子进程
 3. 读取 stdout/stderr
 4. 监控退出码
-5. 用户点击 `Stop` 时终止整个进程树
+5. 用户点击 `Stop` 时终止进程
 
 这样做的原因：
 
@@ -140,43 +156,54 @@ GUI 不通过 native IPC 控制发送端，而是：
 - GUI 和 CLI 可以共享同一套发送逻辑
 - 出问题时容易回退到命令行验证
 
+### Windows WPF 启动器（.NET 10）
+
+`apps/windows-launcher` 是独立的 Windows 原生 GUI：
+
+- `NetworkSpeaker.Launcher` — WPF UI
+- `NetworkSpeaker.Launcher.Core` — 参数模型、命令行构造、设置持久化、子进程托管
+- `NetworkSpeaker.Launcher.Core.Tests` — 核心逻辑单元测试
+
 ## GUI 参数边界
 
-GUI 首版只暴露 Windows 常用参数：
+桌面 GUI 暴露的参数按平台区分：
 
-- `host`
-- `port`
-- `source`
-  - `wasapi`
-  - `sine`
-- `wasapi-role`
-- `seconds`
-
-明确不在 GUI 中暴露：
-
-- Linux `pulse` 相关参数
-- 其他实验性参数
+- `host` — 目标地址
+- `port` — 目标端口
+- `source` — 采集源
+  - Windows: `wasapi`, `sine`
+  - Linux: `pulse`, `sine`
+- `wasapi-role` — Windows WASAPI 角色（仅 Windows）
+- `device` — WASAPI 设备 ID（仅 Windows）
+- `pulse-source` — PulseAudio source 名称（仅 Linux）
+- `seconds` — 限制发送时长（可选）
 
 ## 配置持久化
 
-GUI 配置持久化到：
+GUI 配置持久化路径按平台区分：
 
-- `%AppData%\NetworkSpeaker\settings.json`
+- Windows: `%AppData%\NetworkSpeaker\settings.json`
+- Linux: `~/.config/network-speaker/settings.json`（XDG 规范）
 
 持久化内容：
 
-- `host`
-- `port`
-- `source`
-- `wasapi-role`
-- `seconds`
+- `host`、`port`、`source`、`wasapi-role`、`pulse-source`、`device-id`、`seconds`
 
-`hostd.exe` 路径不持久化，运行时动态发现：
+### hostd 二进制定位策略
 
-- 优先同目录 `hostd.exe`
-- 开发环境下再回退到仓库常见构建目录
+`hostd` 路径不持久化，由 Tauri 桌面应用在运行时通过 `hostd_locator` 按以下优先级搜索：
 
-## MSI 分发设计
+1. **环境变量** — `NSPEAKER_HOSTD_PATH` 显式指定路径
+2. **Tauri sidecar（生产构建）** — `resource_dir/hostd[.exe]`，Tauri 打包时 sidecar 被提取到资源目录，不带 target triple 后缀
+3. **Tauri sidecar（开发模式）** — `resource_dir/binaries/hostd-{target_triple}[.exe]`，`cargo tauri dev` 时 sidecar 保持 `build.rs` 放置的原始命名
+4. **当前可执行文件目录** — 如 RPM 安装时 `network-speaker-desktop` 和 `hostd` 都在 `/usr/bin/`
+5. **系统 PATH** — 遍历 PATH 环境变量搜索，适配通过包管理器安装的 `hostd`
+
+步骤 2 和 3 覆盖 Tauri 的 `externalBin` sidecar 机制（生产与开发两种命名方式），步骤 4 和 5 覆盖系统级安装场景。
+
+## 分发设计
+
+### Windows
 
 MSI 安装包固定包含：
 
@@ -193,36 +220,69 @@ MSI 安装包固定包含：
 - Windows Service
 - 代码签名
 
+### Linux
+
+Tauri 构建产出多种格式：
+
+- **AppImage** — 自包含单文件，无需安装
+- **deb** — Debian/Ubuntu 系
+- **tar.gz** — 通用归档，包含 `network-speaker-desktop` 和 `hostd`
+
+deb 包（Tauri 自动构建）文件布局：
+
+- `/usr/bin/network-speaker-desktop` — 主程序
+- `/usr/lib/network-speaker-desktop/hostd` — sidecar（Tauri `externalBin` 机制）
+- `/usr/share/applications/network-speaker-desktop.desktop`
+- `/usr/share/icons/hicolor/...`
+
+hostd 作为 sidecar 位于资源目录，由 `hostd_locator` 步骤 2（`resource_dir/hostd`）定位。
+
+RPM 包（独立构建）将两者安装到系统路径：
+
+- `/usr/bin/hostd`
+- `/usr/bin/network-speaker-desktop`
+- `/usr/share/applications/Network Speaker.desktop`
+- `/usr/share/icons/hicolor/...`
+
+hostd 与主程序同在 `/usr/bin/`，由 `hostd_locator` 步骤 4（当前可执行文件目录）定位。
+
 ## Release 自动化设计
 
-GitHub Actions Release 流程固定为：
+GitHub Actions Release 流程由 `push` tag `v*` 触发，`staging` 分支 push 生成 pre-release。
+`workflow_dispatch` 只做 dry run（构建、打包、上传 artifact，不创建正式 Release）。
 
-1. `push` tag `v*`
-2. setup-dotnet 10
-3. 初始化 MSVC 工具链
-4. 构建 `hostd.exe`
-5. 运行 GUI 核心测试
-6. `dotnet publish` GUI
-7. 生成 MSI
-8. 生成 SHA256
-9. 上传到 GitHub Release
+各平台构建步骤：
 
-`workflow_dispatch` 只做 dry run：
+### Windows
 
-- 构建
-- 打包
-- 上传 artifact
-- 不创建正式 Release
+1. 初始化 MSVC 工具链
+2. 构建 `hostd.exe`
+3. 运行 GUI 核心测试
+4. `dotnet publish` WPF 启动器
+5. 生成 MSI + SHA256
+6. 上传到 GitHub Release
+
+### Linux
+
+1. 构建 `hostd` + 运行 C++ 测试
+2. 打包为 tar.gz 归档
+3. 构建 Tauri 桌面应用（deb / AppImage）
+4. 在 Fedora 容器中构建 RPM
+5. 上传到 GitHub Release
+
+### Android
+
+1. 构建 Release APK
+2. 上传到 GitHub Release
 
 ## 当前边界
 
 当前不覆盖：
 
-- Linux/macOS GUI
 - 自动发现与配对
 - 握手控制信道
 - 加密
-- FEC
+- Opus inband FEC（需切换到 SILK 混合编码模式，与当前低延迟 CELT-only 模式冲突）
 - 多声道
 - 更强的 Android 后台保活
 - 代码签名和 SmartScreen 体验优化
@@ -231,6 +291,3 @@ GitHub Actions Release 流程固定为：
 
 - 用户说明：[../README.md](../README.md)
 - 开发说明：[CONTRIBUTE.md](CONTRIBUTE.md)
-- 实施计划：[../plan-1.md](../plan-1.md)
-- 阶段进展：[../progress.md](../progress.md)
-- 调试记录：[../debug.md](../debug.md)
